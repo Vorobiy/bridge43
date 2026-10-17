@@ -4,44 +4,68 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ t.title }}</title>
+<link rel="icon" type="image/png" href="/static/brand/favicon.png">
 <style>
-:root { --bg:#f6f5f1; --panel:#fff; --ink:#1d1f1c; --muted:#5d625a; --line:#dedbd2; --accent:#1f6b4f; --accent-soft:#e3f0e9; --bad:#a3271f; --bad-soft:#fbe6e3; }
-@media (prefers-color-scheme: dark) { :root { --bg:#151714; --panel:#1e211d; --ink:#ecebe6; --muted:#a3a79e; --line:#353a33; --accent:#5fbf92; --accent-soft:#1f3529; --bad:#f08a80; --bad-soft:#3d1f1c; } }
+/* PS43 Foundation brand: green 007A5E, yellow FDBB2F, navy 002D62, red CE1126; Superline titles, Arial text */
+@font-face { font-family: "Superline"; font-display: swap;
+  src: local("Superline"), url("/static/fonts/Superline.woff2") format("woff2"), url("/static/fonts/Superline.otf") format("opentype"); }
+@font-face { font-family: "Bebas Neue"; font-display: swap; src: url("/static/fonts/BebasNeue-Regular.woff2") format("woff2"); }
+:root { --green:#007A5E; --yellow:#FDBB2F; --navy:#002D62; --red:#CE1126;
+        --display: "Superline", "Bebas Neue", "Arial Narrow", Arial, sans-serif;
+        --bg:#f0f0f0; --panel:#fff; --ink:#111; --muted:#55605b; --line:#d9dddb; --bad-soft:#fbe2e5; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0b1626; --panel:#11213a; --ink:#eef1f4; --muted:#a6b1c0; --line:#24364f; --bad-soft:#3d1a22; } }
 * { box-sizing: border-box; }
-body { margin:0; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); }
-main { max-width: 640px; margin: 0 auto; padding: 20px 16px 40px; }
-header { display:flex; justify-content: space-between; align-items:center; margin-bottom: 8px; }
-.brand { font-weight: 800; font-size: 20px; } .brand span { color: var(--accent); }
-a { color: var(--accent); }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-top: 14px; }
-.big { display:block; text-align:center; padding: 16px; border-radius: 12px; font-weight: 700; font-size: 17px; text-decoration:none; margin-top: 12px; }
-.big.primary { background: var(--accent); color: #fff; } .big.secondary { border: 2px solid var(--accent); color: var(--accent); background: var(--panel); }
-label { display:block; font-weight: 600; font-size: 14px; margin: 12px 0 4px; }
-input[type=text], input[type=tel], input[type=email], input[type=number], select, textarea { font: inherit; width:100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+body { margin:0; font: 16px/1.5 Arial, "Helvetica Neue", Helvetica, sans-serif; background: var(--bg); color: var(--ink); }
+.hero { background: var(--green); color: #fff; border-bottom: 6px solid var(--yellow); }
+.hero .in { max-width: 640px; margin: 0 auto; padding: 14px 16px 22px; position: relative; overflow: hidden; }
+.hero .bar { display:flex; justify-content: space-between; align-items: center; }
+.hero img { height: 64px; width: auto; display:block; }
+.hero a.lang { color:#fff; font-weight:700; text-decoration: none; border: 2px solid rgba(255,255,255,.6); border-radius: 999px; padding: 4px 12px; font-size: 14px; }
+.hero h1 { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: 44px; line-height: 1; letter-spacing: .5px; margin: 16px 0 6px; max-width: 75%; }
+.hero p { margin: 0; max-width: 80%; opacity: .95; }
+.squares { position:absolute; right: -6px; bottom: 14px; width: 92px; height: 92px; }
+.squares i { position:absolute; display:block; }
+.squares .n { background: var(--navy); width: 54px; height: 54px; left: 0; top: 18px; }
+.squares .r { background: var(--red); width: 34px; height: 34px; left: 44px; top: 0; }
+.squares .y { background: var(--yellow); width: 30px; height: 30px; left: 22px; top: 60px; }
+main { max-width: 640px; margin: 0 auto; padding: 4px 16px 40px; }
+a { color: var(--green); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-top: 16px; }
+.panel h2 { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: 32px; line-height: 1.05; letter-spacing: .5px; color: var(--green); margin: 0 0 6px; }
+.big { display:block; text-align:center; padding: 18px; border-radius: 14px; font-family: var(--display); font-size: 26px; letter-spacing: .6px; text-transform: uppercase; text-decoration:none; margin-top: 14px; }
+.big.primary { background: var(--green); color: #fff; } .big.secondary { background: var(--yellow); color: #111; }
+.big:hover { filter: brightness(1.06); }
+label { display:block; font-weight: 700; font-size: 14px; margin: 14px 0 4px; }
+input[type=text], input[type=tel], input[type=email], input[type=number], select, textarea { font: inherit; width:100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+input:focus, select:focus, textarea:focus { outline: 3px solid var(--yellow); outline-offset: 1px; border-color: var(--green); }
 textarea { min-height: 110px; }
 .checks { display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 4px 12px; }
 .check { display:flex; gap: 8px; align-items: flex-start; font-weight: 400; margin: 4px 0; }
-.check input { margin-top: 4px; }
-button { font: inherit; font-weight: 700; width: 100%; padding: 14px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; margin-top: 16px; cursor: pointer; }
-.muted { color: var(--muted); } .err { background: var(--bad-soft); color: var(--bad); padding: 10px 14px; border-radius: 8px; }
+.check input { margin-top: 4px; accent-color: var(--green); width: 18px; height: 18px; }
+button { font-family: var(--display); font-size: 26px; letter-spacing: .6px; text-transform: uppercase; width: 100%; padding: 12px; border-radius: 12px; border: 0; background: var(--green); color: #fff; margin-top: 18px; cursor: pointer; }
+button:hover { background: var(--navy); }
+.muted { color: var(--muted); } .err { background: var(--bad-soft); color: var(--red); padding: 10px 14px; border-radius: 8px; font-weight: 700; }
 .hp { position: absolute; left: -5000px; }
+.foot { text-align:center; color: var(--muted); font-size: 13px; margin-top: 24px; }
 </style>
 </head>
 <body>
+<div class="hero"><div class="in">
+  <div class="bar"><img src="/static/brand/ps43-logo-white.png" alt="PS43 Foundation">
+    <a class="lang" href="?lang={{ t.lang_other_code }}">{{ t.lang_other }}</a></div>
+  <h1>{% if form == "school" %}{{ t.school_title }}{% elif form == "partner" %}{{ t.partner_title }}{% else %}{{ t.title_short }}{% endif %}</h1>
+  {% if not form and not done %}<p>{{ t.intro }}</p>{% endif %}
+  <div class="squares" aria-hidden="true"><i class="n"></i><i class="r"></i><i class="y"></i></div>
+</div></div>
 <main>
-<header><div class="brand">PS43 <span>Foundation</span></div>
-  <a href="?lang={{ t.lang_other_code }}">{{ t.lang_other }}</a></header>
-
 {% if done %}
-  <div class="panel"><h1 style="margin-top:0">{{ t.thanks }}</h1><p>{{ t.thanks_more }}</p>
+  <div class="panel"><h2>{{ t.thanks }}</h2><p>{{ t.thanks_more }}</p>
     <p><a href="/join?lang={{ lang }}">←</a></p></div>
 {% elif not form %}
-  <p class="muted">{{ t.intro }}</p>
   <a class="big primary" href="/join/school?lang={{ lang }}">{{ t.school_cta }}</a>
   <a class="big secondary" href="/join/partner?lang={{ lang }}">{{ t.partner_cta }}</a>
 {% elif form == "school" %}
   <div class="panel">
-    <h1 style="margin-top:0">{{ t.school_title }}</h1>
     {% if error %}<p class="err">{{ error }}</p>{% endif %}
     <form method="post" action="/join/school">
       <input type="hidden" name="lang" value="{{ lang }}">
@@ -63,7 +87,6 @@ button { font: inherit; font-weight: 700; width: 100%; padding: 14px; border-rad
   </div>
 {% else %}
   <div class="panel">
-    <h1 style="margin-top:0">{{ t.partner_title }}</h1>
     {% if error %}<p class="err">{{ error }}</p>{% endif %}
     <form method="post" action="/join/partner">
       <input type="hidden" name="lang" value="{{ lang }}">
@@ -86,6 +109,7 @@ button { font: inherit; font-weight: 700; width: 100%; padding: 14px; border-rad
     </form>
   </div>
 {% endif %}
+<p class="foot">PS43 Foundation</p>
 </main>
 </body>
 </html>

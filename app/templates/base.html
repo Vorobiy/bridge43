@@ -3,29 +3,42 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}Bridge43{% endblock %} · Bridge43</title>
+<title>{% block title %}Bridge43{% endblock %} · PS43 Bridge</title>
+<link rel="icon" type="image/png" href="/static/brand/favicon.png">
 {% block head %}{% endblock %}
 <style>
+/* PS43 Foundation brand (Brand Book v1.0): green 007A5E, yellow FDBB2F, navy 002D62, red CE1126.
+   Titles in Superline (drop the licensed file in app/static/fonts/), text in Arial. */
+@font-face { font-family: "Superline"; font-display: swap;
+  src: local("Superline"), url("/static/fonts/Superline.woff2") format("woff2"), url("/static/fonts/Superline.otf") format("opentype"); }
+@font-face { font-family: "Bebas Neue"; font-display: swap; src: url("/static/fonts/BebasNeue-Regular.woff2") format("woff2"); }
 :root {
-  --bg: #f6f5f1; --panel: #ffffff; --ink: #1d1f1c; --muted: #5d625a; --line: #dedbd2;
-  --accent: #1f6b4f; --accent-soft: #e3f0e9; --warn: #9a5b00; --warn-soft: #fbf0dc;
-  --bad: #a3271f; --bad-soft: #fbe6e3; --info-soft: #e7eef8; --radius: 10px;
+  --green: #007A5E; --yellow: #FDBB2F; --navy: #002D62; --red: #CE1126;
+  --display: "Superline", "Bebas Neue", "Arial Narrow", Arial, sans-serif;
+  --bg: #f0f0f0; --panel: #ffffff; --ink: #111111; --muted: #55605b; --line: #d9dddb;
+  --accent: #007A5E; --accent-soft: #dff0eb; --warn: #8a5a00; --warn-soft: #fff0cc;
+  --bad: #CE1126; --bad-soft: #fbe2e5; --info-soft: #e3e9f1; --radius: 10px;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg:#151714; --panel:#1e211d; --ink:#ecebe6; --muted:#a3a79e; --line:#353a33;
-          --accent:#5fbf92; --accent-soft:#1f3529; --warn:#e3a54a; --warn-soft:#3a2d17;
-          --bad:#f08a80; --bad-soft:#3d1f1c; --info-soft:#1d2836; }
+  :root { --bg:#0b1626; --panel:#11213a; --ink:#eef1f4; --muted:#a6b1c0; --line:#24364f;
+          --accent:#3cc59d; --accent-soft:#123a35; --warn:#FDBB2F; --warn-soft:#3a3014;
+          --bad:#ff5a6e; --bad-soft:#3d1a22; --info-soft:#162b48; }
 }
 * { box-sizing: border-box; }
-body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); }
+body { margin: 0; font: 15px/1.5 Arial, "Helvetica Neue", Helvetica, sans-serif; background: var(--bg); color: var(--ink); }
 a { color: var(--accent); }
-header.top { display:flex; align-items:center; gap:20px; padding: 12px 20px; border-bottom:1px solid var(--line); background: var(--panel); position: sticky; top:0; z-index:5; }
-header.top .brand { font-weight: 700; letter-spacing: .2px; text-decoration: none; color: var(--ink); }
-header.top .brand span { color: var(--accent); }
-header.top nav a { margin-right: 14px; text-decoration: none; color: var(--muted); font-weight: 500; }
-header.top nav a:hover { color: var(--ink); }
+header.top { display:flex; align-items:center; gap:20px; padding: 8px 20px; background: var(--green); position: sticky; top:0; z-index:5;
+             border-bottom: 4px solid var(--yellow); }
+header.top .brand { display:flex; align-items:center; gap:10px; text-decoration: none; color: #fff; flex: 0 0 auto; }
+header.top .brand img { height: 44px; width: auto; display: block; }
+header.top .brand span { font-family: var(--display); font-size: 24px; letter-spacing: 1px; line-height: 1; }
+header.top nav a { margin-right: 16px; text-decoration: none; color: rgba(255,255,255,.82); font-weight: 700; font-size: 14px;
+                   text-transform: uppercase; letter-spacing: .4px; padding: 6px 0; border-bottom: 3px solid transparent; }
+header.top nav a:hover, header.top nav a.on { color: #fff; border-bottom-color: var(--yellow); }
 main { max-width: 1280px; margin: 0 auto; padding: 20px; }
-h1 { font-size: 22px; margin: 4px 0 14px; }
+h1 { font-family: var(--display); font-weight: 400; font-size: 38px; line-height: 1.05; letter-spacing: .5px;
+     text-transform: uppercase; color: var(--accent); margin: 6px 0 14px; }
+.panel h1 { font-size: 32px; }
 h2 { font-size: 16px; margin: 22px 0 8px; }
 h3 { font-size: 14px; margin: 16px 0 6px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
@@ -59,7 +72,7 @@ header.top nav { overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
 .b-cancelled { background: var(--bad-soft); color: var(--bad); }
 .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
 .kpis > div { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; }
-.kpis strong { display: block; font-size: 26px; line-height: 1.2; }
+.kpis strong { display: block; font-family: var(--display); font-weight: 400; font-size: 38px; line-height: 1.05; letter-spacing: .5px; }
 .kpis span { font-size: 12.5px; color: var(--muted); }
 .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
 @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
@@ -70,9 +83,11 @@ header.top nav { overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
 .pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); margin: 2px 2px 0 0; }
 .meter { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .meter > i { display: block; height: 100%; background: var(--accent); }
-.q-act_now { --q: var(--bad); } .q-prepare_first { --q: var(--warn); } .q-quick_wins { --q: var(--accent); }
-.q-monitor { --q: var(--muted); } .q-safety_hold { --q: var(--bad); }
-.qhead { border-left: 4px solid var(--q); padding-left: 8px; margin: 0 0 8px; }
+.q-act_now { --q: var(--red); --qt: #fff; } .q-prepare_first { --q: var(--yellow); --qt: #111; }
+.q-quick_wins { --q: var(--green); --qt: #fff; } .q-monitor { --q: var(--navy); --qt: #fff; }
+.q-safety_hold { --q: #111; --qt: #fff; }
+.qhead { border-left: 6px solid var(--q); padding-left: 8px; margin: 0 0 8px; font-family: var(--display); font-weight: 400;
+         font-size: 22px; letter-spacing: .5px; color: var(--ink); }
 .log { list-style: none; padding: 0; margin: 0; }
 .log li { padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .log .when { color: var(--muted); font-size: 12px; }
@@ -92,7 +107,8 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--lin
 th { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
 tr.clickable { cursor: pointer; } tr.clickable:hover { background: var(--bg); }
 button, .btn { font: inherit; font-weight: 600; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; text-decoration: none; display: inline-block; }
-button.primary, .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary, .btn.primary { background: var(--green); border-color: var(--green); color: #fff; }
+button.primary:hover, .btn.primary:hover { background: var(--navy); border-color: var(--navy); }
 button.danger { color: var(--bad); }
 button:disabled { opacity: .5; cursor: not-allowed; }
 input[type=text], input[type=tel], select, textarea { font: inherit; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
@@ -107,8 +123,9 @@ details > summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="/">Bridge<span>43</span></a>
-  <nav><a href="/">Inbox</a><a href="/dashboard">Priorities</a><a href="/tickets">Tickets</a><a href="/partners">Partners</a><a href="/matches">Matching</a><a href="/intake">Add intake</a><a href="/join" target="_blank">Public sign-up</a></nav>
+  <a class="brand" href="/"><img src="/static/brand/ps43-logo-white.png" alt="PS43 Foundation"><span>Bridge</span></a>
+  {% set here = request.url.path %}
+  <nav><a href="/" class="{{ 'on' if here == '/' or here.startswith('/threads') }}">Inbox</a><a href="/dashboard" class="{{ 'on' if here.startswith('/dashboard') }}">Priorities</a><a href="/tickets" class="{{ 'on' if here.startswith('/tickets') }}">Tickets</a><a href="/partners" class="{{ 'on' if here.startswith('/partners') }}">Partners</a><a href="/matches" class="{{ 'on' if here.startswith('/matches') }}">Matching</a><a href="/intake" class="{{ 'on' if here.startswith('/intake') }}">Add intake</a><a href="/join" target="_blank">Public sign-up</a></nav>
 </header>
 <main>
 {% if open_mode %}<div class="flash warn small">Development mode: no staff password is set, so these screens are open. Set STAFF_PASSWORD before putting this online.</div>{% endif %}
