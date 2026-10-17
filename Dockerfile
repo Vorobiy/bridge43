@@ -14,4 +14,5 @@ COPY scripts ./scripts
 # The database and media live on a persistent volume mounted at /data
 ENV DATA_DIR=/data PYTHONUNBUFFERED=1
 EXPOSE 8000
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]
+# Always port 8000 (the Railway domain points there), whatever PORT the host suggests
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
