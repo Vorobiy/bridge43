@@ -9,8 +9,9 @@
 .matrix .dot { stroke: var(--panel); stroke-width: 2; }
 .matrix a:hover .dot { stroke: var(--ink); }
 .matrix .lbl { fill: var(--ink); font-size: 11.5px; }
-.dot.q-act_now { fill: var(--bad); } .dot.q-prepare_first { fill: var(--warn); }
-.dot.q-quick_wins { fill: var(--accent); } .dot.q-monitor { fill: var(--muted); }
+.matrix .dot { fill: var(--q); }
+.matrix text { font-family: Arial, sans-serif; }
+.matrix text.q { font-family: var(--display); font-weight: 400; font-size: 18px; letter-spacing: .5px; }
 .boxes { display: grid; grid-template-columns: repeat(5, minmax(200px, 1fr)); gap: 12px; overflow-x: auto; }
 .boxes .card { margin-bottom: 8px; }
 .scores { display: flex; gap: 10px; font-size: 12.5px; color: var(--muted); margin: 4px 0; }
@@ -64,10 +65,10 @@
       {% set mx = L + (W - L - 8) / 2 %}{% set my = 8 + (H - B - 8) / 2 %}
       <line class="axis" x1="{{ mx }}" y1="8" x2="{{ mx }}" y2="{{ H - B }}"/>
       <line class="axis" x1="{{ L }}" y1="{{ my }}" x2="{{ W - 8 }}" y2="{{ my }}"/>
-      <text class="q" x="{{ L + 10 }}" y="26" style="fill:var(--warn)">Prepare first</text>
-      <text class="q" x="{{ W - 18 }}" y="26" text-anchor="end" style="fill:var(--bad)">Act now</text>
-      <text class="q" x="{{ L + 10 }}" y="{{ H - B - 10 }}">Monitor</text>
-      <text class="q" x="{{ W - 18 }}" y="{{ H - B - 10 }}" text-anchor="end" style="fill:var(--accent)">Quick wins</text>
+      <text class="q" x="{{ L + 10 }}" y="30" style="fill:var(--warn)">PREPARE FIRST</text>
+      <text class="q" x="{{ W - 18 }}" y="30" text-anchor="end" style="fill:var(--bad)">ACT NOW</text>
+      <text class="q" x="{{ L + 10 }}" y="{{ H - B - 10 }}" style="fill:var(--navy)">MONITOR</text>
+      <text class="q" x="{{ W - 18 }}" y="{{ H - B - 10 }}" text-anchor="end" style="fill:var(--accent)">QUICK WINS</text>
       <text x="{{ L + (W - L) / 2 }}" y="{{ H - 8 }}" text-anchor="middle">Readiness → (power, signal, storage, road, maintainer, parents)</text>
       <text x="14" y="{{ (H - B) / 2 }}" text-anchor="middle" transform="rotate(-90 14 {{ (H - B) / 2 }})">Need →</text>
       {% for p in plot %}
@@ -87,7 +88,7 @@
       <tr class="clickable" onclick="location.href='/threads/{{ c.thread.id }}'">
         <td><strong>{{ c.score.name }}</strong><br><span class="small muted">{{ [c.score.town, c.score.region]|select|join(", ") }}{% if c.score.students %} · {{ c.score.students }} pupils{% endif %}</span></td>
         <td>{{ c.score.need }}</td><td>{{ c.score.readiness }}</td>
-        <td><span class="badge q-{{ c.score.quadrant }}" style="background:var(--q); color:#fff">{{ c.score.quadrant_label }}</span></td>
+        <td><span class="badge q-{{ c.score.quadrant }}" style="background:var(--q); color:var(--qt)">{{ c.score.quadrant_label }}</span></td>
         <td>{{ c.open_tickets }}</td>
       </tr>
       {% else %}<tr><td colspan="5" class="muted">No approved school cases yet. Approve a school's draft in the inbox and it appears here.</td></tr>

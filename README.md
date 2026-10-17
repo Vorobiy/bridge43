@@ -121,6 +121,10 @@ help* for donors, contractors, suppliers and shippers. Each form becomes an inta
 WhatsApp message (AI draft, staff review), with a consent checkbox and a hidden anti-bot field. Share the link in
 PS43's outreach.
 
+**PS43 branding**: all screens and the public sign-up follow the PS43 Brand Book (green #007A5E, yellow #FDBB2F,
+navy #002D62, red #CE1126, Arial text, PS43 logo in `app/static/brand/`). Titles use Superline when its licensed
+file is placed in `app/static/fonts/` (see the README there), otherwise the bundled free Bebas Neue.
+
 **Demo data**: `python -m scripts.seed_demo` loads fictional schools and partners for the whole flow (a computer lab
 covered by two laptop donors and a shipper, an inflated roofing quote, a trusted borehole contractor with two
 confirmed cases, a follow-up due, a school on safety hold). `--intake-only` loads only the two intake examples.

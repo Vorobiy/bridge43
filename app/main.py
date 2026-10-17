@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from . import db, ops_web, public_web, recorder_api, web
 from .channels import kobo, twilio
@@ -47,6 +49,7 @@ def config_problems() -> list[str]:
 
 
 app = FastAPI(title="Bridge43 intake", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")  # PS43 logos, fonts
 app.include_router(twilio.router)
 app.include_router(kobo.router)
 app.include_router(recorder_api.router)

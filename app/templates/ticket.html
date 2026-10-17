@@ -14,7 +14,7 @@
       <h1 style="margin:8px 0 4px">{{ t.description }}{% if t.quantity_text %} <span class="muted">· {{ t.quantity_text }}</span>{% endif %}</h1>
       <p class="muted" style="margin:0">For <a href="/threads/{{ t.thread_id }}">{{ score.name if score else (t.display_name or t.case_title) }}</a>
         {% if score %}· {{ [score.town, score.region]|select|join(", ") }}{% if score.students %} · {{ score.students }} pupils{% endif %}
-        · <span class="badge q-{{ score.quadrant }}" style="background:var(--q); color:#fff">{{ score.quadrant_label }}</span>{% endif %}
+        · <span class="badge q-{{ score.quadrant }}" style="background:var(--q); color:var(--qt)">{{ score.quadrant_label }}</span>{% endif %}
         · {{ t.case_number }}</p>
     </div>
     <form method="post" action="/tickets/{{ t.id }}/status" class="row" style="flex:0 0 260px; align-items:flex-end">

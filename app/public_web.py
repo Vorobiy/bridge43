@@ -26,7 +26,7 @@ GIVES = ["money", "goods", "services", "volunteers", "transport", "expertise"]
 
 T = {
     "fr": {
-        "title": "PS43 Foundation : écoles et partenaires", "lang_other": "English", "lang_other_code": "en",
+        "title": "PS43 Foundation : écoles et partenaires", "title_short": "Ensemble pour les écoles du Cameroun", "lang_other": "English", "lang_other_code": "en",
         "intro": "PS43 aide les écoles du Cameroun à obtenir des salles de classe, de l'eau, de l'électricité, des ordinateurs et du matériel, avec des partenaires de confiance.",
         "school_cta": "Mon école a besoin d'aide", "partner_cta": "Je veux aider (don, travaux, transport)",
         "school_title": "Demander de l'aide pour une école", "partner_title": "Proposer de l'aide",
@@ -55,7 +55,7 @@ T = {
                         "other": "Autre"},
     },
     "en": {
-        "title": "PS43 Foundation: schools and partners", "lang_other": "Français", "lang_other_code": "fr",
+        "title": "PS43 Foundation: schools and partners", "title_short": "Together for Cameroon's schools", "lang_other": "Français", "lang_other_code": "fr",
         "intro": "PS43 helps schools in Cameroon get classrooms, water, power, computers and materials, with partners we trust.",
         "school_cta": "My school needs help", "partner_cta": "I want to help (donate, build, ship)",
         "school_title": "Ask for help for a school", "partner_title": "Offer help",
