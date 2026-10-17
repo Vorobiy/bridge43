@@ -92,9 +92,15 @@ QUESTIONS = [
              "Merci d'envoyer 2 photos : une salle de classe, et les toilettes ou le point d'eau. Pas de visages d'enfants, s'il vous plaît.",
              lambda d, t: t in ("photo_backed", "visit_confirmed")),
 ]
+QUESTIONS.append(Question(
+    15, "vulnerable_children",
+    "Are there displaced or refugee children, children with a disability, or orphans at the school? About how many of each?",
+    "Y a-t-il à l'école des enfants déplacés ou réfugiés, des enfants en situation de handicap, ou des orphelins ? Combien environ ?",
+    lambda d, t: any((d.get("vulnerability") or {}).get(k) is not None
+                     for k in ("displaced_pupils", "pupils_with_disability", "orphans"))))
 BY_ID = {q.id: q for q in QUESTIONS}
 # Safety first, then what decides priority; location, photos and details last.
-ASK_ORDER = [3, 1, 13, 4, 7, 8, 5, 6, 14, 2, 9, 10, 11, 12]
+ASK_ORDER = [3, 1, 13, 4, 7, 8, 5, 6, 14, 15, 2, 9, 10, 11, 12]
 
 INTRO = {
     "fr": "PS43 : Merci ! Pour compléter le dossier de votre école, pouvez-vous répondre à {n} :",

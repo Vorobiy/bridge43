@@ -121,9 +121,30 @@ help* for donors, contractors, suppliers and shippers. Each form becomes an inta
 WhatsApp message (AI draft, staff review), with a consent checkbox and a hidden anti-bot field. Share the link in
 PS43's outreach.
 
-**PS43 branding**: all screens and the public sign-up follow the PS43 Brand Book (green #007A5E, yellow #FDBB2F,
-navy #002D62, red #CE1126, Arial text, PS43 logo in `app/static/brand/`). Titles use Superline when its licensed
-file is placed in `app/static/fonts/` (see the README there), otherwise the bundled free Bebas Neue.
+**Today** (`/today`, the home page): one to-do list for a small team: new requests to check, follow-ups to send,
+partners ready to confirm (one click), prices to question, deliveries gone quiet, schools in *Act now*.
+
+**Why this priority**: every school shows one plain sentence explaining its box (gaps, pupils, vulnerability,
+readiness). Staff can change every weight in **Settings** (`/settings`); nothing is a black box.
+
+**Vulnerability**: extra need points (up to 15, adjustable or switched off) for children more at risk, counted
+only from what schools say: conflict or insecurity (or a crisis-affected region, editable list; default Far North,
+Northwest, Southwest), displaced or refugee pupils, pupils with a disability, orphans, and few girls enrolled.
+Schools are asked about it in the follow-up questions. Numbers only, never children's names.
+
+**Map and blind spots** (on Schools): a self-hosted map of Cameroon (no map service, works offline) with schools
+coloured by box, and the regions with no request yet, where outreach should go.
+
+**Impact** (`/impact`, printable for donors): pupils in schools helped, needs delivered, % confirmed by schools,
+median days from first message to delivery, FCFA of over-priced quotes questioned, partners by trust, by region and
+type, confirmed stories, and cost per case from the unit prices entered in Settings.
+
+**Public sign-up**: a "Write on WhatsApp" button (set `PUBLIC_WHATSAPP`, or it uses `TWILIO_WHATSAPP_FROM`) for
+voice notes and photos, and a shorter school form (details optional).
+
+**PS43 branding**: all screens and the public sign-up use the PS43 Brand Book colours (green #007A5E, yellow
+#FDBB2F, navy #002D62, red #CE1126) and logo (`app/static/brand/`). Text and titles use Calibri for easy reading;
+Carlito, its free look-alike, is bundled in `app/static/fonts/` for phones and computers without Calibri.
 
 **Demo data**: `python -m scripts.seed_demo` loads fictional schools and partners for the whole flow (a computer lab
 covered by two laptop donors and a shipper, an inflated roofing quote, a trusted borehole contractor with two

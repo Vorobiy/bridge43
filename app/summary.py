@@ -55,7 +55,7 @@ CASE_TOOL = {
         "type": "object",
         "additionalProperties": False,
         "required": ["relevance", "relevance_reason", "what_changed", "case_type", "title", "organization", "location",
-                     "operating_status", "situation", "profile", "donor", "needs", "offers", "assets",
+                     "operating_status", "situation", "profile", "vulnerability", "donor", "needs", "offers", "assets",
                      "readiness", "numbers", "people", "plan", "open_questions", "safety_flags",
                      "language", "confidence", "confirmation_message"],
         "properties": {
@@ -182,6 +182,20 @@ CASE_TOOL = {
                                    "properties": {"status": _status, "note": {"type": ["string", "null"]}, "citations": _cite}}
                                for k in READINESS_KEYS},
             },
+            "vulnerability": {
+                "type": "object", "additionalProperties": False,
+                "required": ["conflict_affected", "displaced_pupils", "pupils_with_disability", "orphans",
+                             "note", "citations"],
+                "description": "Children who are more at risk, only as stated: conflict or insecurity around the school, "
+                               "internally displaced or refugee pupils, pupils with a disability, orphans or children "
+                               "living without parents. null / unknown when not discussed.",
+                "properties": {
+                    "conflict_affected": {"type": "string", "enum": ["yes", "no", "unknown"],
+                                          "description": "yes if the school or its pupils are affected by conflict, attacks or insecurity."},
+                    "displaced_pupils": _int, "pupils_with_disability": _int, "orphans": _int,
+                    "note": {"type": ["string", "null"]}, "citations": _cite,
+                },
+            },
             "numbers": {
                 "type": "object", "additionalProperties": False,
                 "required": [*NUMBER_KEYS, "citations"],
@@ -250,6 +264,8 @@ Rules:
   management committee that can help receive, guard and maintain what is delivered.
 - location: copy coordinates only from a "Shared location" item, a map link or a GPS field; never estimate them.
 - operating_status: closed or unsafe schools must be flagged; also add a safety_flags entry when the area is unsafe.
+- vulnerability: record conflict, displaced or refugee pupils, pupils with a disability and orphans only as stated.
+  These are about children's situations: write numbers and facts, never names of individual children.
 - Donors and partners: anyone offering money, goods, services, transport, volunteers or expertise is case_type
   "offer". List each thing they offer in offers (one entry per kind of item, with quantity and conditions; money
   goes in offers with category "funding") and fill the donor block. Never invent amounts or promises.
@@ -424,6 +440,8 @@ def normalize(data: dict) -> dict:
         "organization": {"name": None, "type": "unknown", "region": None, "town": None, "citations": []},
         "location": {"latitude": None, "longitude": None, "description": None, "citations": []},
         "operating_status": {"status": "unknown", "safe_to_reach": "unknown", "note": None, "citations": []},
+        "vulnerability": {"conflict_affected": "unknown", "displaced_pupils": None, "pupils_with_disability": None,
+                          "orphans": None, "note": None, "citations": []},
         "situation": {"text": "", "citations": []},
         "donor": {"kind": "unknown", "gives": [], "provides_summary": None, "amount": None, "regions": [],
                   "timeframe": None, "conditions": None, "registered": "unknown", "past_work_with_ps43": None,

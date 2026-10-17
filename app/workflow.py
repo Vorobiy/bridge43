@@ -180,6 +180,7 @@ def approved_cases() -> list[dict]:
     Needs already delivered are left out of the need score, so a school moves down the matrix once helped.
     """
     done = {(k["thread_id"], k["need_key"]) for k in db.list_tickets() if k["status"] in ("delivered", "checked")}
+    cfg = scoring.config()
     out = []
     for t in db.list_threads():
         if t["status"] in ("rejected", "not_relevant", "closed"):
@@ -190,7 +191,7 @@ def approved_cases() -> list[dict]:
         data = s["data"]
         helped = [n for n in data.get("needs") or [] if (t["id"], _key(n)) in done]
         scored = {**data, "needs": [n for n in data.get("needs") or [] if n not in helped]}
-        out.append({"thread": t, "summary": s, "data": data, "score": scoring.score_case(scored),
+        out.append({"thread": t, "summary": s, "data": data, "score": scoring.score_case(scored, cfg),
                     "helped": [n["description"] for n in helped]})
     return out
 
@@ -454,3 +455,245 @@ def send(contact_id: int, thread_id: int | None, text: str, who: str, ticket_id:
 def followups_due(today: str | None = None) -> list[dict]:
     today = today or datetime.now(timezone.utc).date().isoformat()
     return [{**f, "message": followup_message(f)} for f in db.list_followups(due_by=today, unsent_only=True)]
+
+
+
+# ---------------------------------------------------------------- Today: one to-do list
+
+STALL_DAYS = 14
+
+
+def _days_since(ts: str | None) -> int | None:
+    if not ts:
+        return None
+    try:
+        then = datetime.fromisoformat(ts)
+    except ValueError:
+        return None
+    if then.tzinfo is None:
+        then = then.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - then).days
+
+
+def today_view() -> dict:
+    """What the team should do now, most important first. Each item has one obvious action."""
+    drafts = sorted(db.list_threads(status="draft_ready"), key=lambda t: t["last_item_at"])
+    followups = followups_due()
+    cov = coverage_view()
+    ready = [r for r in cov["rows"] if r["ticket"]["status"] == "new" and r["plan"]["type"] in ("single", "combined")]
+    no_partner = [r for r in cov["rows"] if r["plan"]["type"] == "none"]
+    quotes = db.list_quotes()
+    open_ids = {k["id"]: k for k in db.list_tickets() if k["status"] in ("new", "matched", "in_progress")}
+    flagged = []
+    for q in quotes:
+        if q["ticket_id"] in open_ids and not q["chosen"]:
+            check = matching.price_check(q, quotes)
+            if check["status"] == "high":
+                flagged.append({**q, "check": check, "ticket": open_ids[q["ticket_id"]]})
+    stalled = []
+    for k in db.list_tickets():
+        if k["status"] in ("matched", "in_progress"):
+            events = db.list_events(k["id"])
+            quiet = _days_since(events[-1]["at"] if events else k["updated_at"])
+            if quiet is not None and quiet >= STALL_DAYS:
+                stalled.append({**k, "quiet_days": quiet})
+    m = matrix_view()
+    act_now = [c for c in m["boxes"]["act_now"] if c["open_tickets"]]
+    names = school_names()
+    for r in ready + no_partner:
+        r["ticket"]["school"] = names.get(r["ticket"]["thread_id"]) or r["ticket"].get("school")
+    for f in followups:
+        f["school"] = names.get(f["thread_id"]) or f.get("display_name")
+    for k in stalled:
+        k["school"] = names.get(k["thread_id"]) or k.get("display_name")
+    count = len(drafts) + len(followups) + len(ready) + len(flagged) + len(stalled)
+    return {"drafts": drafts, "followups": followups, "ready": ready, "flagged": flagged, "stalled": stalled,
+            "act_now": act_now, "no_partner": no_partner, "count": count, "hold": m["boxes"]["safety_hold"]}
+
+
+# ---------------------------------------------------------------- Impact: the donor report
+
+def impact_view() -> dict:
+    tickets = db.list_tickets()
+    threads = {t["id"]: t for t in db.list_threads()}
+    cases = {c["thread"]["id"]: c for c in approved_cases()}
+    delivered = [k for k in tickets if k["status"] in ("delivered", "checked")]
+    confirmed = [k for k in delivered if k["status"] == "checked"]
+    helped_threads = {k["thread_id"] for k in delivered}
+    pupils = sum((cases[t]["score"]["students"] or 0) for t in helped_threads if t in cases)
+    days = []
+    for k in delivered:
+        start = threads.get(k["thread_id"], {}).get("opened_at")
+        if start and k.get("delivered_at"):
+            d = (datetime.fromisoformat(k["delivered_at"]) - datetime.fromisoformat(start)).days
+            days.append(max(0, d))
+    days.sort()
+    median_days = days[len(days) // 2] if days else None
+
+    quotes = db.list_quotes()
+    questioned = 0.0
+    flagged_quotes = 0
+    for q in quotes:
+        c = matching.price_check(q, quotes)
+        if c["status"] == "high" and c.get("median") and q.get("quantity"):
+            questioned += q["amount"] - c["median"] * q["quantity"]
+            flagged_quotes += 1
+
+    partners = partners_view()
+    trust_counts = {lvl: sum(1 for p in partners if p["trust"]["level"] == lvl) for lvl in ("Trusted", "Verified", "New")}
+    links = db.list_links()
+    by_region: dict[str, dict] = {}
+    for c in cases.values():
+        r = c["score"]["region"] or "Unknown"
+        row = by_region.setdefault(r, {"region": r, "schools": 0, "open": 0, "delivered": 0, "pupils": 0})
+        row["schools"] += 1
+        mine = [k for k in tickets if k["thread_id"] == c["thread"]["id"]]
+        row["open"] += sum(1 for k in mine if k["status"] in ("new", "matched", "in_progress"))
+        done = sum(1 for k in mine if k["status"] in ("delivered", "checked"))
+        row["delivered"] += done
+        if done:
+            row["pupils"] += c["score"]["students"] or 0
+    by_category: dict[str, int] = {}
+    for k in delivered:
+        label = matching.CATEGORY_LABELS.get(k["category"], k["category"])
+        by_category[label] = by_category.get(label, 0) + 1
+    names = school_names()
+    stories = []
+    for k in sorted(confirmed, key=lambda k: k.get("delivered_at") or "", reverse=True)[:8]:
+        who = sorted({l["donor_name"] for l in links if l["ticket_id"] == k["id"] and l["status"] != "cancelled"})
+        c = cases.get(k["thread_id"])
+        stories.append({"ticket": k, "school": names.get(k["thread_id"]) or k["case_title"], "partners": who,
+                        "pupils": c["score"]["students"] if c else None,
+                        "region": c["score"]["region"] if c else None})
+    sent_followups = [f for f in db.list_followups() if f["sent_at"]]
+    return {
+        "schools": len(cases), "schools_helped": len(helped_threads), "pupils": pupils,
+        "needs_total": len([k for k in tickets if k["status"] != "cancelled"]), "delivered": len(delivered),
+        "confirmed": len(confirmed), "confirmed_rate": round(100 * len(confirmed) / len(delivered)) if delivered else None,
+        "median_days": median_days, "questioned": round(questioned), "flagged_quotes": flagged_quotes,
+        "partners": len(partners), "trust_counts": trust_counts,
+        "partners_completed": sum(1 for p in partners if p["completed"]),
+        "by_region": sorted(by_region.values(), key=lambda r: -r["schools"]),
+        "by_category": sorted(by_category.items(), key=lambda kv: -kv[1]), "stories": stories,
+        "followups_sent": len(sent_followups), "cost": cost_view(len(cases)),
+    }
+
+
+COST_KEYS = ("per_ai_draft", "per_message", "monthly_hosting")
+
+
+def cost_view(school_cases: int) -> dict | None:
+    """Cost per case from the unit prices staff enter in Settings (nothing is assumed)."""
+    costs = db.get_setting("costs", {}) or {}
+    if not any(costs.get(k) for k in COST_KEYS):
+        return None
+    n = db.activity_counts()
+    months = max(1, (_days_since(n["first_contact"]) or 0) // 30 + 1)
+    parts = {
+        "AI drafts": n["ai_drafts"] * float(costs.get("per_ai_draft") or 0),
+        "WhatsApp/SMS messages": n["messages"] * float(costs.get("per_message") or 0),
+        "Hosting": months * float(costs.get("monthly_hosting") or 0),
+    }
+    total = sum(parts.values())
+    return {"currency": costs.get("currency") or "USD", "parts": parts, "total": total, "counts": n,
+            "months": months, "per_case": total / n["cases"] if n["cases"] else None}
+
+
+# ---------------------------------------------------------------- the journey and the one next step
+
+TICKET_STAGE = {"new": "match", "matched": "deliver", "in_progress": "deliver", "delivered": "confirm",
+                "checked": "confirm", "cancelled": None}
+
+
+def journey_counts() -> dict:
+    threads = db.list_threads()
+    tickets = db.list_tickets()
+    return {
+        "request": sum(1 for t in threads if t["status"] == "open"),
+        "check": sum(1 for t in threads if t["status"] == "draft_ready"),
+        "rank": len(approved_cases()),
+        "match": sum(1 for k in tickets if k["status"] == "new"),
+        "deliver": sum(1 for k in tickets if k["status"] in ("matched", "in_progress")),
+        "confirm": sum(1 for k in tickets if k["status"] == "delivered"),
+    }
+
+
+def case_stage(thread: dict, tickets: list[dict]) -> str | None:
+    if thread["status"] == "open":
+        return "request"
+    if thread["status"] == "draft_ready":
+        return "check"
+    if thread["status"] != "approved":
+        return None
+    order = ["match", "deliver", "confirm"]
+    stages = [TICKET_STAGE.get(k["status"]) for k in tickets if TICKET_STAGE.get(k["status"])]
+    open_stages = [TICKET_STAGE[k["status"]] for k in tickets if k["status"] not in ("checked", "cancelled")]
+    if open_stages:
+        return min(open_stages, key=order.index)  # the step that still needs work
+    return "confirm" if stages else "rank"
+
+
+def ticket_next_step(t: dict, plan: dict, steps: list[dict]) -> dict | None:
+    """The single most useful action on a need, as a button."""
+    status = t["status"]
+    if status == "new":
+        if plan["type"] in ("single", "combined", "partial") and plan["picks"]:
+            who = " + ".join(p["donor_name"] for p in plan["picks"])
+            return {"label": f"Confirm {who}", "hint": "They match this need on type of help, place and quantity.",
+                    "action": f"/tickets/{t['id']}/assign-plan", "button": "Confirm partner"}
+        return {"label": "No partner yet", "hint": "Add one PS43 knows, or share the sign-up link where this help is needed.",
+                "href": "/partners", "button": "Find a partner"}
+    if status in ("matched", "in_progress"):
+        todo = [s for s in steps if not s["done_at"] and not s["title"].startswith(CONFIRM_PREFIX)
+                and s["title"] != "Check use after 1 month"]
+        if status == "matched" and not any(e["kind"] == "message" for e in db.list_events(t["id"])):
+            return {"label": "Tell the partner", "hint": "Send the prepared message below, then log the first step.",
+                    "href": "#message", "button": "Write the message"}
+        if todo:
+            return {"label": f"Mark done: {todo[0]['title']}", "hint": f"Step {todo[0]['position']} of {len(steps)}.",
+                    "action": f"/tickets/{t['id']}/steps/{todo[0]['id']}/done", "button": "Done"}
+    if status == "delivered":
+        confirm = next((s for s in steps if s["title"].startswith(CONFIRM_PREFIX) and not s["done_at"]), None)
+        if confirm:
+            return {"label": "Did the school confirm, with photos?", "hint": "Only a school confirmation raises the partner's trust.",
+                    "action": f"/tickets/{t['id']}/steps/{confirm['id']}/done", "button": "Yes, school confirmed"}
+    if status == "checked":
+        return {"label": "Done: confirmed by the school", "hint": "Follow-ups go out at 30, 90 and 180 days (see Today)."}
+    return None
+
+
+def case_next_step(thread: dict, summary: dict | None, tickets: list[dict], partner: dict | None) -> dict | None:
+    if thread["status"] == "draft_ready" and summary:
+        return {"label": "Check the draft against the messages, then approve",
+                "hint": "Click the I-numbers to see where each fact comes from.", "href": "#decide", "button": "Review and approve"}
+    if thread["status"] == "open":
+        return {"label": "Collecting messages", "hint": "The AI writes a draft once the messages are processed."}
+    if thread["status"] != "approved":
+        return None
+    if partner:
+        return {"label": f"{partner['name']} is in the partners database", "href": f"/partners/{partner['id']}",
+                "button": "Open partner"}
+    order = {"new": 0, "matched": 1, "in_progress": 2, "delivered": 3}
+    open_t = sorted((k for k in tickets if k["status"] in order), key=lambda k: order[k["status"]])
+    if open_t:
+        k = open_t[0]
+        verb = {"new": "Find a partner for", "matched": "Start delivery of", "in_progress": "Keep going:",
+                "delivered": "Get the school to confirm"}[k["status"]]
+        return {"label": f"{verb} {k['description']}", "hint": f"{len(open_t)} open need(s) for this school.",
+                "href": f"/tickets/{k['id']}", "button": "Open need"}
+    return {"label": "Nothing open for this school", "hint": "Every need is delivered and confirmed."}
+
+
+def search(q: str) -> dict:
+    q = (q or "").strip().lower()
+    if len(q) < 2:
+        return {"q": q, "cases": [], "partners": [], "needs": []}
+    names = school_names()
+    cases = [t for t in db.list_threads() if any(q in (v or "").lower() for v in
+             (t["case_number"], t["title"], t["display_name"], t["address"], names.get(t["id"])))]
+    partners = [d for d in db.list_donors() if q in d["name"].lower() or q in (d.get("summary") or "").lower()
+                or any(q in r.lower() for r in d["regions"])]
+    needs = [{**k, "school": names.get(k["thread_id"]) or k["display_name"]} for k in db.list_tickets()
+             if q in k["description"].lower() or q in (names.get(k["thread_id"]) or "").lower()
+             or q in matching.CATEGORY_LABELS.get(k["category"], "").lower()]
+    return {"q": q, "cases": cases[:20], "partners": partners[:20], "needs": needs[:20]}

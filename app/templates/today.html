@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Today{% endblock %}
+{% block head %}
+<style>
+.todo { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .todo { grid-template-columns: 1fr; } }
+.task { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.task:last-child { border-bottom: 0; }
+.task .what { flex: 1; min-width: 0; }
+.task .what strong { display: block; }
+.task form { margin: 0; }
+.section-h { display: flex; align-items: baseline; gap: 10px; margin: 0 0 4px; }
+.section-h h2 { margin: 0; }
+.count { font-family: var(--display); font-weight: 700; font-size: 24px; line-height: 1; color: var(--accent); }
+.done { color: var(--muted); font-size: 14px; padding: 6px 0; }
+.hello { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 8px; }
+.pillbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px; }
+.pillbar a { text-decoration: none; background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+             padding: 4px 12px; font-size: 13px; color: var(--ink); }
+.pillbar b { color: var(--accent); }
+</style>
+{% endblock %}
+{% block body %}
+{% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
+{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+<div class="hello">
+  <div><h1 style="margin-bottom:2px">Today</h1>
+    <p class="muted" style="margin-top:0">{{ date }} · {% if v.count %}{{ v.count }} thing{{ "" if v.count == 1 else "s" }} to do, most important first.{% else %}Nothing waiting. Well done.{% endif %}</p></div>
+</div>
+{{ ui.journey(None, counts, big=True) }}
+
+<div class="todo">
+<div>
+  {% if v.drafts %}
+  <div class="panel" id="drafts" style="margin-bottom:16px">
+    <div class="section-h"><span class="count">{{ v.drafts|length }}</span><h2>Check new requests</h2></div>
+    <p class="small muted" style="margin-top:2px">The AI wrote a draft from their messages. Check it against the sources, then approve.</p>
+    {% for t in v.drafts[:6] %}
+    <div class="task"><div class="what"><strong>{{ t.title or t.display_name or t.address }}</strong>
+      <span class="small muted">{{ t.case_number }} · {{ t.display_name or t.address }} · {{ t.last_item_at[:10] }}</span></div>
+      <a class="btn primary" href="/threads/{{ t.id }}">Review</a></div>
+    {% else %}<p class="done">No drafts waiting.</p>{% endfor %}
+    {% if v.drafts|length > 6 %}<p class="small"><a href="/?status=draft_ready">See all {{ v.drafts|length }}</a></p>{% endif %}
+  </div>
+  {% endif %}
+
+  {% if v.followups %}
+  <div class="panel" id="followups" style="margin-bottom:16px">
+    <div class="section-h"><span class="count">{{ v.followups|length }}</span><h2>Ask schools if it still works</h2></div>
+    <p class="small muted" style="margin-top:2px">30, 90 and 180 days after a delivery. Their answer is the proof of impact.</p>
+    {% for f in v.followups %}
+    <div class="task"><div class="what"><strong>{{ f.description }}</strong>
+      <span class="small muted">{{ f.school }} · {{ f.days }}-day check · due {{ f.due_on }}</span></div>
+      <form method="post" action="/followups/{{ f.id }}/send">
+        <input type="hidden" name="text" value="{{ f.message }}"><input type="hidden" name="back" value="/today">
+        <input type="hidden" name="manual" value="{{ '' if settings.twilio_enabled else '1' }}">
+        <button class="primary" type="submit" title="{{ f.message }}">{{ "Send on WhatsApp" if settings.twilio_enabled else "Mark as sent" }}</button></form></div>
+    {% else %}<p class="done">No follow-ups due.</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if v.ready %}
+  <div class="panel" id="ready" style="margin-bottom:16px">
+    <div class="section-h"><span class="count">{{ v.ready|length }}</span><h2>Confirm a partner</h2></div>
+    <p class="small muted" style="margin-top:2px">A partner (or several together) can cover these needs. One click adds them; then message them from the ticket.</p>
+    {% for r in v.ready %}
+    <div class="task"><div class="what"><strong>{{ r.ticket.description }}{% if r.ticket.quantity_text %} · {{ r.ticket.quantity_text }}{% endif %}</strong>
+      <span class="small muted">{{ r.ticket.school }} · {% for p in r.plan.picks %}{{ p.donor_name }}{% if p.covers %} ({{ p.covers|qty }}){% endif %}{% if not loop.last %} + {% endif %}{% endfor %}
+      {% if r.plan.needs_shipping %} · needs shipping{% endif %}</span></div>
+      <a class="btn" href="/tickets/{{ r.ticket.id }}">Look</a>
+      <form method="post" action="/tickets/{{ r.ticket.id }}/assign-plan"><input type="hidden" name="back" value="/today">
+        <button class="primary" type="submit">Confirm</button></form></div>
+    {% else %}<p class="done">Nothing to confirm.</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if v.flagged %}
+  <div class="panel" id="prices" style="margin-bottom:16px">
+    <div class="section-h"><span class="count">{{ v.flagged|length }}</span><h2>Question a price</h2></div>
+    <p class="small muted" style="margin-top:2px">These quotes are well above what others charge for the same thing.</p>
+    {% for q in v.flagged %}
+    <div class="task"><div class="what"><strong>{{ q.who }}: {{ "{:,.0f}".format(q.amount) }} FCFA</strong>
+      <span class="small muted">{{ q.ticket.description }} · {{ q.check.label }}</span></div>
+      <a class="btn" href="/tickets/{{ q.ticket_id }}">Open</a></div>
+    {% else %}<p class="done">No inflated quotes.</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if v.stalled %}
+  <div class="panel" id="stalled" style="margin-bottom:16px">
+    <div class="section-h"><span class="count">{{ v.stalled|length }}</span><h2>Chase a delivery</h2></div>
+    <p class="small muted" style="margin-top:2px">No news for 14 days or more.</p>
+    {% for k in v.stalled %}
+    <div class="task"><div class="what"><strong>{{ k.description }}</strong>
+      <span class="small muted">{{ k.school }} · quiet for {{ k.quiet_days }} days</span></div>
+      <a class="btn" href="/tickets/{{ k.id }}">Send a reminder</a></div>
+    {% else %}<p class="done">Every delivery has recent news.</p>{% endfor %}
+  </div>
+  {% endif %}
+  {% set empty = [] %}
+  {% if not v.drafts %}{% set _ = empty.append("new requests to check") %}{% endif %}
+  {% if not v.followups %}{% set _ = empty.append("follow-ups") %}{% endif %}
+  {% if not v.ready %}{% set _ = empty.append("partners to confirm") %}{% endif %}
+  {% if not v.flagged %}{% set _ = empty.append("prices to question") %}{% endif %}
+  {% if not v.stalled %}{% set _ = empty.append("deliveries to chase") %}{% endif %}
+  {% if empty %}<p class="done">Nothing waiting: {{ empty|join(", ") }}. ✓</p>{% endif %}
+</div>
+
+<div>
+  <div class="panel q-act_now">
+    <h2 class="qhead" style="margin-top:0">Act now ({{ v.act_now|length }})</h2>
+    <p class="small muted" style="margin-top:0">Schools with the highest need that are ready to receive help.</p>
+    {% for c in v.act_now %}
+    <div class="task"><div class="what"><strong><a href="/threads/{{ c.thread.id }}">{{ c.score.name }}</a></strong>
+      <span class="small">{{ c.score.why }}</span></div></div>
+    {% else %}<p class="done">No school in Act now.</p>{% endfor %}
+    <p class="small"><a href="/dashboard">All schools on the matrix and map →</a></p>
+  </div>
+  {% if v.no_partner %}
+  <div class="panel" style="margin-top:16px">
+    <h2 style="margin-top:0">Needs with no partner yet ({{ v.no_partner|length }})</h2>
+    <p class="small muted" style="margin-top:0">Where to point outreach and the public sign-up link.</p>
+    {% for r in v.no_partner %}<div class="small" style="padding:4px 0"><a href="/tickets/{{ r.ticket.id }}">{{ r.ticket.description }}</a> · {{ r.ticket.school }}</div>{% endfor %}
+  </div>
+  {% endif %}
+  {% if v.hold %}
+  <div class="panel q-safety_hold" style="margin-top:16px">
+    <h2 class="qhead" style="margin-top:0">Safety hold ({{ v.hold|length }})</h2>
+    {% for c in v.hold %}<div class="small" style="padding:4px 0"><a href="/threads/{{ c.thread.id }}">{{ c.score.name }}</a>: {{ c.score.why }}</div>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+</div>
+{% endblock %}

@@ -1,12 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Tickets{% endblock %}
+{% import "_ui.html" as ui %}
+{% block title %}Needs{% endblock %}
 {% block body %}
 {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
-<h1 style="margin-bottom:4px">Tickets</h1>
-<p class="muted small" style="margin-top:0">One ticket per school need. It moves right as a partner is found, the work is done and the school confirms it.</p>
+<div class="row" style="align-items:center"><h1 style="margin-bottom:4px; flex:3">Needs</h1>
+  <div style="flex:0 0 auto"><a class="btn" href="/matches">Matching overview: needs vs. partner offers</a></div></div>
+<p class="muted small" style="margin-top:0">One card per school need. It moves right as a partner is found, the work is done and the school confirms it.</p>
 <div class="board">
 {% for status, items in cols.items() %}
-  <div class="col">
+  <div class="col" id="col-{{ status }}">
     <h3>{{ status_labels[status] }} <span class="muted">({{ items|length }})</span></h3>
     {% for k in items %}
     <div class="card">

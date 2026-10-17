@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block body %}
+{% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
+<h1 style="margin-bottom:4px">Settings</h1>
+<p class="muted" style="margin-top:0">How schools are ranked. Every school page shows the reasons, and you can change the weights here: the ranking is never a black box.</p>
+<form method="post" action="/settings">
+<div class="grid2">
+  <div class="panel">
+    <h2 style="margin-top:0">Need: how much each gap counts</h2>
+    <p class="small muted" style="margin-top:0">0 = ignore, 3 = counts a lot. Need = weighted gaps (up to 70) + number of pupils (up to 30) + vulnerability (below), capped at 100.</p>
+    <table><thead><tr><th>Area</th><th style="width:110px">Weight</th><th style="width:90px">Default</th></tr></thead><tbody>
+    {% for k, w in cfg.need_weights.items() %}<tr><td>{{ area_labels[k]|capitalize }}</td>
+      <td><input type="text" inputmode="numeric" name="w_{{ k }}" value="{{ w }}"></td><td class="muted">{{ defaults.need_weights[k] }}</td></tr>{% endfor %}
+    </tbody></table>
+    <label for="split">Line between high and low (need and readiness, 5-95)</label>
+    <input id="split" type="text" inputmode="numeric" name="split" value="{{ cfg.split }}" style="max-width:120px">
+    <h2>Vulnerability: children more at risk</h2>
+    <p class="small muted" style="margin-top:0">Extra need points for conflict, displaced or refugee pupils, pupils with a disability, orphans, and few girls enrolled (only what the school told us). 0 turns it off.</p>
+    <label for="vm">Up to this many extra points (default {{ defaults.vulnerability_max }})</label>
+    <input id="vm" type="text" inputmode="numeric" name="vulnerability_max" value="{{ cfg.vulnerability_max }}" style="max-width:120px">
+    <label>Regions where insecurity affects schools</label>
+    <input type="hidden" name="crisis_form" value="1">
+    <div class="row">{% for r in regions %}<label class="check" style="flex:0 0 150px"><input type="checkbox" name="crisis_{{ r }}" value="1" {% if r in cfg.crisis_regions %}checked{% endif %}> {{ r }}</label>{% endfor %}</div>
+  </div>
+  <div class="panel">
+    <h2 style="margin-top:0">Readiness: can the school receive help?</h2>
+    <p class="small muted" style="margin-top:0">Points when the answer is yes, and when it is partly (e.g. solar only, calls only, road closed in rainy season). Shown as a score out of 100.</p>
+    <table><thead><tr><th>Item</th><th style="width:100px">Yes</th><th style="width:100px">Partly</th></tr></thead><tbody>
+    {% for k, v in cfg.readiness_points.items() %}<tr><td>{{ readiness_labels[k]|capitalize }}</td>
+      <td><input type="text" inputmode="numeric" name="r_{{ k }}_full" value="{{ v[0] }}"></td>
+      <td><input type="text" inputmode="numeric" name="r_{{ k }}_part" value="{{ v[1] }}"></td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+</div>
+<div class="panel" style="margin-top:16px">
+  <h2 style="margin-top:0">Running costs (for cost per case on the Impact page)</h2>
+  <p class="small muted" style="margin-top:0">Enter your real prices from your invoices. Leave empty if you do not know yet.</p>
+  <div class="row">
+    <div><label>AI, per case draft</label><input type="text" name="per_ai_draft" value="{{ costs.per_ai_draft if costs.per_ai_draft is not none else '' }}" placeholder="e.g. 0.03"></div>
+    <div><label>WhatsApp/SMS, per message</label><input type="text" name="per_message" value="{{ costs.per_message if costs.per_message is not none else '' }}" placeholder="e.g. 0.01"></div>
+    <div><label>Hosting, per month</label><input type="text" name="monthly_hosting" value="{{ costs.monthly_hosting if costs.monthly_hosting is not none else '' }}" placeholder="e.g. 5"></div>
+    <div style="flex:0 0 120px"><label>Currency</label><input type="text" name="currency" value="{{ costs.currency or 'USD' }}"></div>
+  </div>
+</div>
+<p class="actions"><button class="primary" type="submit">Save</button>
+  <button type="submit" name="reset" value="1" onclick="return confirm('Go back to the default weights?')">Reset weights to default</button></p>
+</form>
+{% endblock %}

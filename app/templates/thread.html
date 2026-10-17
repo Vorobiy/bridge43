@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% macro cites(c) %}{% for i in c or [] %}<a class="cite" href="#item-{{ i }}" title="Jump to source I{{ i }}">I{{ i }}</a>{% endfor %}{% endmacro %}
 {% block title %}{{ thread.title or contact.display_name or contact.address }}{% endblock %}
 {% block head %}
@@ -41,7 +42,8 @@
 <div class="flash warn">Set aside as not related to PS43's school work{% if summary.data.relevance_reason %}: {{ summary.data.relevance_reason }}{% endif %}
   New messages from this contact still land here and are re-checked automatically.</div>
 {% endif %}
-<div class="panel small" style="margin-bottom:14px; display:flex; gap:14px; flex-wrap:wrap; align-items:center">
+<details class="small" style="margin:-6px 0 12px"><summary class="muted" style="margin:0">More actions: not relevant, close, merge ({{ items|length }} messages{% if channels %} via {{ channels|join(", ") }}{% endif %})</summary>
+<div class="panel small" style="margin-top:6px; display:flex; gap:14px; flex-wrap:wrap; align-items:center">
   <span>All of this contact's messages, voice notes, photos, videos and calls are collected in this case
     ({{ items|length }} items{% if channels %}: {{ channels|join(", ") }}{% endif %}).</span>
   <span style="flex:1"></span>
@@ -62,13 +64,15 @@
     </form>
     <p class="muted" style="margin:4px 0 0">Use this when the same school reached you from two numbers or names.</p>
   </details>
-</div>
+</div></details>
 
 {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
 {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
 {% if request.query_params.get('imported') %}<div class="flash ok">Imported {{ request.query_params.get('imported') }} messages{% if request.query_params.get('dupes', '0') != '0' %} ({{ request.query_params.get('dupes') }} already here){% endif %}.
   {% if request.query_params.get('missing', '0') != '0' %}{{ request.query_params.get('missing') }} attachments were not in the upload: export again with "Include media" to get them.{% endif %}</div>{% endif %}
 {% if in_flight %}<div class="flash warn">Processing {{ in_flight }} item(s): transcribing and describing media. This page refreshes on its own.</div>{% endif %}
+{% if stage %}{{ ui.journey(stage) }}{% endif %}
+{{ ui.next_step(next) }}
 
 <div class="layout">
 <section class="sources">
@@ -121,6 +125,16 @@
   </div>
   {% else %}
   {% set d = summary.data %}
+  {% if priority %}
+  <div class="panel q-{{ priority.quadrant }}" style="margin-bottom:16px; border-left: 8px solid var(--q)">
+    <div class="row" style="align-items:center">
+      <div style="flex:3"><span class="badge" style="background:var(--q); color:var(--qt)">{{ priority.quadrant_label }}</span>
+        <span class="small muted">need {{ priority.need }} · readiness {{ priority.readiness }}</span>
+        <p style="margin:6px 0 0"><strong>Why:</strong> {{ priority.why }}</p></div>
+      <div style="flex:0 0 auto"><a class="btn" href="/dashboard">See all schools</a></div>
+    </div>
+  </div>
+  {% endif %}
   <div class="panel">
     <div class="row" style="align-items:center">
       <div style="flex:3">
@@ -156,6 +170,16 @@
     <p>{{ d.situation.text }} {{ cites(d.situation.citations) }}</p>
     {% if d.operating_status and d.operating_status.note %}<p class="small">{{ d.operating_status.note }} {{ cites(d.operating_status.citations) }}</p>{% endif %}
 
+    {% set v = d.vulnerability %}
+    {% if v and (v.conflict_affected == "yes" or v.displaced_pupils or v.pupils_with_disability or v.orphans or v.note) %}
+    <h3>Children more at risk</h3>
+    <p>{% if v.conflict_affected == "yes" %}<span class="pill">affected by conflict</span>{% endif %}
+      {% if v.displaced_pupils %}<span class="pill">{{ v.displaced_pupils }} displaced or refugee pupils</span>{% endif %}
+      {% if v.pupils_with_disability %}<span class="pill">{{ v.pupils_with_disability }} with a disability</span>{% endif %}
+      {% if v.orphans %}<span class="pill">{{ v.orphans }} orphans</span>{% endif %}
+      {% if v.note %}<span class="small">{{ v.note }}</span>{% endif %} {{ cites(v.citations) }}</p>
+    {% endif %}
+
     {% if d.donor and (d.case_type == "offer" or d.organization.type == "donor") %}
     <h3>What they can provide</h3>
     <p>{{ d.donor.provides_summary or "Not summarised yet." }} {{ cites(d.donor.citations) }}</p>
@@ -174,7 +198,7 @@
     <h3>School profile{% if d._follow_up and d._follow_up.complete is not none %} <span class="small muted">· {{ d._follow_up.complete }}% complete</span>{% endif %}</h3>
     <div class="profile">
     {% for k in profile_keys %}{% set p = d.profile[k] %}
-      <div class="p-{{ p.status }}" title="{{ profile_areas[k] }}"><span class="small">{{ k.replace("_", " ") }}</span><br>
+      <div class="p-{{ p.status }}" title="{{ profile_areas[k] }}"><span class="small">{{ area_labels.get(k, k.replace("_", " "))|capitalize }}</span><br>
         <span class="badge b-{{ p.status }}">{{ p.status }}</span>
         {% if p.note %}<div class="small muted">{{ p.note }}</div>{% endif %}{{ cites(p.citations) }}</div>
     {% endfor %}
@@ -205,18 +229,24 @@
     </tbody></table>
     {% endif %}
 
-    {% if d.assets %}
-    <h3>Assets</h3>
-    <ul>{% for a in d.assets %}<li>{{ a.description }} {{ cites(a.citations) }}</li>{% endfor %}</ul>
-    {% endif %}
-
-    <h3>Readiness</h3>
+    {% if d.case_type != "offer" %}
+    <h3>Ready to receive help?</h3>
+    {{ ui.readiness_icons(d.readiness) }}
+    <details style="margin-top:6px"><summary class="small">Readiness details and sources</summary>
     <div class="readiness">
     {% for k in readiness_keys %}{% set r = d.readiness[k] %}
       <div><span class="small">{{ k.replace("_", " ") }}</span><br><span class="badge b-{{ r.status }}">{{ r.status }}</span>
         {% if r.note %}<div class="small muted">{{ r.note }}</div>{% endif %}{{ cites(r.citations) }}</div>
     {% endfor %}
-    </div>
+    </div></details>
+    {% endif %}
+
+    {% if d.assets or d.plan or d.people or d.open_questions %}
+    <details style="margin-top:12px"><summary>More: what they already have, plan, people, open questions</summary>
+    {% if d.assets %}
+    <h3>Assets</h3>
+    <ul>{% for a in d.assets %}<li>{{ a.description }} {{ cites(a.citations) }}</li>{% endfor %}</ul>
+    {% endif %}
 
     {% if d.plan %}
     <h3>Plan / next steps</h3>
@@ -232,10 +262,12 @@
     <h3>Open questions</h3>
     <ul>{% for q in d.open_questions %}<li>{{ q }}</li>{% endfor %}</ul>
     {% endif %}
+    </details>
+    {% endif %}
   </div>
 
   {% if summary.status == "draft" %}
-  <div class="panel" style="margin-top:16px">
+  <div class="panel" style="margin-top:16px; border: 2px solid var(--green)" id="decide">
     <h2 style="margin-top:0">Check and decide</h2>
     <p class="small muted">Check each fact against its source (click the I-numbers). Fix anything wrong, then approve to create the case.</p>
     <details>
@@ -273,7 +305,7 @@
   </div>
   {% elif summary.status == "approved" %}
   <div class="flash ok" style="margin-top:16px">Case <strong>{{ thread.case_number }}</strong> approved by {{ summary.reviewer }} on {{ summary.reviewed_at[:16].replace("T", " ") }}.{% if summary.review_notes %} Note: {{ summary.review_notes }}{% endif %}
-    {% if case_tickets %}<br>Tickets: {% for k in case_tickets %}<a href="/tickets/{{ k.id }}">{{ k.description }}</a> ({{ k.status.replace("_", " ") }}){% if not loop.last %} · {% endif %}{% endfor %}
+    {% if case_tickets %}<br>Needs: {% for k in case_tickets %}<a href="/tickets/{{ k.id }}">{{ k.description }}</a> ({{ k.status.replace("_", " ") }}){% if not loop.last %} · {% endif %}{% endfor %}
     · <a href="/dashboard">see it on the priority matrix</a>{% endif %}
     {% if partner %}<br>Partner record: <a href="/partners/{{ partner.id }}">{{ partner.name }}</a>{% endif %}</div>
   {% else %}
@@ -296,8 +328,8 @@
   {% endif %}
 
   {% if summary.status != "rejected" %}
-  <div class="panel" style="margin-top:16px">
-    <h2 style="margin-top:0">Confirm with the contact</h2>
+  <details class="more-box" {% if summary.status == "approved" and not summary.confirmation_sent_at %}open{% endif %}>
+    <summary>{{ ui.icon("message") }} Confirm with the contact{% if summary.confirmation_sent_at %} (sent){% endif %}</summary>
     <p class="small muted">Send the summary back so they can confirm or correct it. Their reply lands in this thread.
       {% if summary.confirmation_sent_at %}<strong>Last sent {{ summary.confirmation_sent_at[:16].replace("T", " ") }}.</strong>{% endif %}</p>
     <form method="post" action="/summaries/{{ summary.id }}/send-confirmation">
@@ -308,7 +340,7 @@
         {% elif not can_message %}<span class="small muted">No phone number on this contact.</span>{% endif %}
       </p>
     </form>
-  </div>
+  </details>
   {% endif %}
   {% endif %}
 </section>

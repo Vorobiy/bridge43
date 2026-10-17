@@ -40,6 +40,10 @@ T = {
         "email": "E-mail (si pas de WhatsApp)",
         "consent": "J'accepte que PS43 conserve ces informations pour traiter ma demande et me contacte sur WhatsApp. Je peux demander leur suppression à tout moment (envoyez STOP).",
         "send": "Envoyer", "thanks": "Merci ! Votre message est bien arrivé.",
+        "wa_title": "Plus simple : WhatsApp", "wa_text": "Écrivez-nous ou envoyez une note vocale, en français, en anglais ou en pidgin. Vous pouvez aussi envoyer des photos.",
+        "wa_button": "Écrire sur WhatsApp", "wa_school": "Bonjour PS43, je vous écris pour notre école. Nom de l'école et ville : ",
+        "wa_partner": "Bonjour PS43, je voudrais aider des écoles. Je peux offrir : ",
+        "more": "Plus de détails (facultatif)", "or_form": "ou remplissez le formulaire",
         "thanks_more": "Une personne de PS43 va le lire et vous écrira sur WhatsApp. Vous pouvez aussi envoyer des photos ou une note vocale sur WhatsApp.",
         "missing": "Merci de remplir les champs obligatoires et de cocher l'accord.",
         "need_labels": {"classrooms_building": "Salles de classe / bâtiment", "roofing": "Toiture", "water": "Eau potable",
@@ -69,6 +73,10 @@ T = {
         "email": "Email (if no WhatsApp)",
         "consent": "I agree that PS43 keeps this information to handle my request and contacts me on WhatsApp. I can ask for it to be deleted at any time (send STOP).",
         "send": "Send", "thanks": "Thank you! Your message has arrived.",
+        "wa_title": "Easier: WhatsApp", "wa_text": "Write to us or send a voice note, in English, French or Pidgin. You can send photos too.",
+        "wa_button": "Write on WhatsApp", "wa_school": "Hello PS43, I am writing about our school. School name and town: ",
+        "wa_partner": "Hello PS43, I would like to help schools. I can offer: ",
+        "more": "More details (optional)", "or_form": "or fill in the form",
         "thanks_more": "Someone from PS43 will read it and write to you on WhatsApp. You can also send photos or a voice note on WhatsApp.",
         "missing": "Please fill in the required fields and tick the agreement.",
         "need_labels": {"classrooms_building": "Classrooms / building", "roofing": "Roofing", "water": "Drinking water",
@@ -86,14 +94,27 @@ T = {
 }
 
 
+def whatsapp_link(lang: str, form: str | None) -> str | None:
+    """wa.me link to PS43's WhatsApp with a ready-to-send first line, or None if no number is set."""
+    from urllib.parse import quote
+    from .config import settings
+    number = re.sub(r"\D", "", settings.public_whatsapp or settings.twilio_whatsapp_from or "")
+    if len(number) < 8:
+        return None
+    t = _t(lang)
+    text = t["wa_partner"] if form == "partner" else t["wa_school"]
+    return f"https://wa.me/{number}?text={quote(text)}"
+
+
 def _t(lang: str) -> dict:
     return T["en" if lang == "en" else "fr"]
 
 
 def _page(request: Request, name: str, lang: str, status_code: int = 200, **kw):
     lang = "en" if lang == "en" else "fr"
-    return templates.TemplateResponse(request, name, {"request": request, "t": _t(lang), "lang": lang,
-                                                      "regions": REGIONS, "needs": NEEDS, "gives": GIVES, **kw},
+    ctx = {"request": request, "t": _t(lang), "lang": lang, "regions": REGIONS, "needs": NEEDS, "gives": GIVES,
+           "wa": whatsapp_link(lang, kw.get("form")), **kw}
+    return templates.TemplateResponse(request, name, ctx,
                                       status_code=status_code)
 
 

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Priorities{% endblock %}
+{% import "_ui.html" as ui %}
+{% block title %}Schools{% endblock %}
 {% block head %}
 <style>
 .matrix svg { width: 100%; height: auto; display: block; }
@@ -9,10 +10,18 @@
 .matrix .dot { stroke: var(--panel); stroke-width: 2; }
 .matrix a:hover .dot { stroke: var(--ink); }
 .matrix .lbl { fill: var(--ink); font-size: 11.5px; }
-.matrix .dot { fill: var(--q); }
-.matrix text { font-family: Arial, sans-serif; }
-.matrix text.q { font-family: var(--display); font-weight: 400; font-size: 18px; letter-spacing: .5px; }
-.boxes { display: grid; grid-template-columns: repeat(5, minmax(200px, 1fr)); gap: 12px; overflow-x: auto; }
+.matrix .dot, .map .dot { fill: var(--q); stroke: var(--panel); stroke-width: 1.5; }
+.map svg { width: 100%; max-width: 420px; height: auto; display: block; margin: 0 auto; }
+.map .land { fill: var(--bg); stroke: var(--muted); stroke-width: 1; }
+.map .region { font: 700 9.5px var(--text); fill: var(--muted); paint-order: stroke; stroke: var(--panel); stroke-width: 3px; pointer-events: none; }
+.map .region.empty { fill: var(--red); font-weight: 700; }
+.map a:hover .dot { stroke: var(--ink); stroke-width: 2.5; }
+.why { margin-top: 4px; }
+.tabpane .grid2 { align-items: start; }
+.scores .meter2 { width: 70px; }
+.matrix text { font-family: var(--text); }
+.matrix text.q { font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: 0; }
+.boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
 .boxes .card { margin-bottom: 8px; }
 .scores { display: flex; gap: 10px; font-size: 12.5px; color: var(--muted); margin: 4px 0; }
 .scores b { color: var(--ink); }
@@ -22,7 +31,7 @@
 {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
 {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
 <div class="row" style="align-items:center">
-  <h1 style="flex:3; margin-bottom:4px">Priorities</h1>
+  <h1 style="flex:3; margin-bottom:4px">Schools by priority</h1>
   <form method="get" style="flex:0 0 220px"><select name="region" onchange="this.form.submit()">
     <option value="">All regions</option>{% for r in regions %}<option {% if r == region %}selected{% endif %}>{{ r }}</option>{% endfor %}
   </select></form>
@@ -30,33 +39,21 @@
 <p class="muted small" style="margin-top:0">Every approved school, scored on need (what is missing × how many children) and readiness (can the site receive and look after help). Tap a school to open its case.</p>
 
 <div class="kpis">
-  <div><strong>{{ kpis.schools }}</strong><span>schools with an approved profile</span></div>
+  <div><strong>{{ kpis.schools }}</strong><span>schools ranked</span></div>
   <div><strong style="color:var(--bad)">{{ kpis.act_now }}</strong><span>to act on now</span></div>
   <div><strong>{{ kpis.open_needs }}</strong><span>needs waiting for a partner</span></div>
-  <div><strong>{{ kpis.match_rate if kpis.match_rate is not none else "—" }}{% if kpis.match_rate is not none %}%{% endif %}</strong><span>of those have a partner match</span></div>
-  <div><strong>{{ kpis.in_progress }}</strong><span>needs being delivered</span></div>
-  <div><strong>{{ kpis.delivered }}</strong><span>delivered</span></div>
-  <div><strong>{{ kpis.partners }}</strong><span>partners and donors</span></div>
-  {% if kpis.hold %}<div><strong style="color:var(--bad)">{{ kpis.hold }}</strong><span>on safety hold</span></div>{% endif %}
+  <div><strong style="color:{{ 'var(--bad)' if kpis.hold else 'inherit' }}">{{ kpis.hold }}</strong><span>on safety hold</span></div>
 </div>
 
-{% if followups %}
-<div class="panel" style="margin-bottom:16px">
-  <h2 style="margin-top:0">Follow-ups due ({{ followups|length }})</h2>
-  <p class="small muted">Ask the school whether what was delivered is still working. Their answers arrive in the school's case.</p>
-  {% for f in followups %}
-  <details {% if loop.first %}open{% endif %}>
-    <summary>{{ f.display_name or f.case_title }} · {{ f.description }} · {{ f.days }}-day check (due {{ f.due_on }})</summary>
-    <form method="post" action="/followups/{{ f.id }}/send">
-      <textarea name="text" rows="6">{{ f.message }}</textarea>
-      <label class="check"><input type="checkbox" name="manual" value="1"> I sent it from my phone (just log it)</label>
-      <p><button class="primary" type="submit">Send follow-up</button> <a class="small" href="/tickets/{{ f.ticket_id }}">open ticket</a></p>
-    </form>
-  </details>
-  {% endfor %}
-</div>
-{% endif %}
+{% if followups %}<p class="small"><a href="/today#followups">{{ followups|length }} follow-up{{ "" if followups|length == 1 else "s" }} due: send them from Today →</a></p>{% endif %}
 
+<nav class="tabs" role="tablist">
+  <a href="#matrix" data-tab="matrix" class="on">{{ ui.icon("grid") }} Matrix</a>
+  <a href="#map" data-tab="map">{{ ui.icon("map") }} Map</a>
+  <a href="#list" data-tab="list">{{ ui.icon("list") }} List</a>
+</nav>
+
+<div class="tabpane on" id="pane-matrix">
 <div class="grid2">
   <div class="panel matrix">
     <h2 style="margin-top:0">Priority matrix</h2>
@@ -65,10 +62,10 @@
       {% set mx = L + (W - L - 8) / 2 %}{% set my = 8 + (H - B - 8) / 2 %}
       <line class="axis" x1="{{ mx }}" y1="8" x2="{{ mx }}" y2="{{ H - B }}"/>
       <line class="axis" x1="{{ L }}" y1="{{ my }}" x2="{{ W - 8 }}" y2="{{ my }}"/>
-      <text class="q" x="{{ L + 10 }}" y="30" style="fill:var(--warn)">PREPARE FIRST</text>
-      <text class="q" x="{{ W - 18 }}" y="30" text-anchor="end" style="fill:var(--bad)">ACT NOW</text>
-      <text class="q" x="{{ L + 10 }}" y="{{ H - B - 10 }}" style="fill:var(--navy)">MONITOR</text>
-      <text class="q" x="{{ W - 18 }}" y="{{ H - B - 10 }}" text-anchor="end" style="fill:var(--accent)">QUICK WINS</text>
+      <text class="q" x="{{ L + 10 }}" y="30" style="fill:var(--warn)">Prepare first</text>
+      <text class="q" x="{{ W - 18 }}" y="30" text-anchor="end" style="fill:var(--bad)">Act now</text>
+      <text class="q" x="{{ L + 10 }}" y="{{ H - B - 10 }}" style="fill:var(--navy)">Monitor</text>
+      <text class="q" x="{{ W - 18 }}" y="{{ H - B - 10 }}" text-anchor="end" style="fill:var(--accent)">Quick wins</text>
       <text x="{{ L + (W - L) / 2 }}" y="{{ H - 8 }}" text-anchor="middle">Readiness → (power, signal, storage, road, maintainer, parents)</text>
       <text x="14" y="{{ (H - B) / 2 }}" text-anchor="middle" transform="rotate(-90 14 {{ (H - B) / 2 }})">Need →</text>
       {% for p in plot %}
@@ -79,26 +76,8 @@
     </svg>
     <p class="small muted">Dot size = number of pupils. Closed or unsafe schools are not plotted: see Safety hold.</p>
   </div>
-  <div class="panel" style="overflow-x:auto">
-    <h2 style="margin-top:0">Ranked list</h2>
-    <table>
-      <thead><tr><th>School</th><th>Need</th><th>Ready</th><th>Box</th><th>Open needs</th></tr></thead>
-      <tbody>
-      {% for c in view.cases %}
-      <tr class="clickable" onclick="location.href='/threads/{{ c.thread.id }}'">
-        <td><strong>{{ c.score.name }}</strong><br><span class="small muted">{{ [c.score.town, c.score.region]|select|join(", ") }}{% if c.score.students %} · {{ c.score.students }} pupils{% endif %}</span></td>
-        <td>{{ c.score.need }}</td><td>{{ c.score.readiness }}</td>
-        <td><span class="badge q-{{ c.score.quadrant }}" style="background:var(--q); color:var(--qt)">{{ c.score.quadrant_label }}</span></td>
-        <td>{{ c.open_tickets }}</td>
-      </tr>
-      {% else %}<tr><td colspan="5" class="muted">No approved school cases yet. Approve a school's draft in the inbox and it appears here.</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<h2>What to do with each school</h2>
+  <div>
+<h2 style="margin-top:0">What to do with each school</h2>
 <div class="boxes">
 {% for q, info in view.quadrants.items() %}{% set label, help = info %}
   <div class="q-{{ q }}">
@@ -108,11 +87,11 @@
     <div class="card">
       <a class="title" href="/threads/{{ c.thread.id }}">{{ c.score.name }}</a>
       <div class="small muted">{{ [c.score.town, c.score.region]|select|join(", ") or "place not known" }} · {{ c.thread.case_number }}</div>
-      <div class="scores"><span>need <b>{{ c.score.need }}</b></span><span>ready <b>{{ c.score.readiness }}</b></span>
-        {% if c.score.complete is not none %}<span>profile <b>{{ c.score.complete }}%</b></span>{% endif %}</div>
-      {% if c.score.drivers %}<div class="small">Biggest gaps: {{ c.score.drivers|join(", ") }}</div>{% endif %}
+      <div class="scores"><span>need</span> {{ ui.meter(c.score.need, "need") }} <span>ready</span> {{ ui.meter(c.score.readiness, "readiness") }}</div>
+      {% if c.score.gaps %}<div class="small">{{ c.score.gaps[:2]|join(" · ")|capitalize }}</div>{% endif %}
+      {% if c.score.vulnerable %}<div class="small" style="color:var(--red)">At risk: {{ c.score.vulnerable[:2]|join(", ") }}</div>{% endif %}
       {% if q == "prepare_first" and c.score.not_ready %}<div class="small" style="color:var(--warn)">Prepare: {{ c.score.not_ready[:3]|join(", ") }}</div>{% endif %}
-      {% if c.score.urgent_safety %}<div class="small" style="color:var(--bad)">Building safety is critical</div>{% endif %}
+      <details class="small why"><summary style="margin:4px 0 0">Why?</summary>{{ c.score.why }}</details>
       {% if c.helped %}<div class="small" style="color:var(--accent)">Already helped: {{ c.helped|join(", ") }}</div>{% endif %}
       {% for k in c.tickets if k.status not in ("checked", "cancelled") %}
         <a class="pill" href="/tickets/{{ k.id }}">{{ category_labels.get(k.category, k.category) }} · {{ status_labels[k.status] }}</a>
@@ -122,4 +101,66 @@
   </div>
 {% endfor %}
 </div>
+  </div>
+</div>
+</div>
+
+<div class="tabpane" id="pane-map">
+<div class="grid2">
+  <div class="panel map">
+    <h2 style="margin-top:0">Map</h2>
+    <svg viewBox="-6 -6 {{ geo.width + 12 }} {{ geo.height + 12 }}" role="img" aria-label="Map of Cameroon with schools by priority">
+      <path class="land" d="{{ geo.path }}"/>
+      {% for d in geo.dots %}<a href="/threads/{{ d.c.thread.id }}"><title>{{ d.c.score.name }} · {{ d.c.score.quadrant_label }} · placed by {{ d.how }}</title>
+        <circle class="dot q-{{ d.c.score.quadrant }}" cx="{{ d.x }}" cy="{{ d.y }}" r="{{ 5 + d.c.score.reach / 8 }}"/></a>{% endfor %}
+      {% for l in geo.labels %}<text class="region {{ 'empty' if not l.count }}" x="{{ l.x }}" y="{{ l.y + 14 }}" text-anchor="middle">{{ l.name }}</text>{% endfor %}
+    </svg>
+    <p class="small muted">Dots: <span style="color:var(--red)">●</span> Act now · <span style="color:var(--yellow)">●</span> Prepare first · <span style="color:var(--green)">●</span> Quick wins · <span style="color:var(--navy)">●</span> Monitor · ● Safety hold. Placed by shared WhatsApp location, else town, else region.</p>
+  </div>
+  <div class="panel">
+    <h2 style="margin-top:0">Blind spots</h2>
+    {% if geo.blind_spots %}
+    <p>No school request yet from <strong>{{ geo.blind_spots|join(", ") }}</strong>.</p>
+    <p class="small muted">Silence is not the same as no need. Point outreach here: share the sign-up link (<a href="/join" target="_blank">/join</a>) with education delegations, churches and mosques, parents' associations and radio in these regions.</p>
+    {% else %}<p>Every region has at least one school request.</p>{% endif %}
+    <table><thead><tr><th>Region</th><th>Schools</th></tr></thead><tbody>
+    {% for l in geo.labels|sort(attribute="count", reverse=True) %}<tr><td>{{ l.name }}</td><td>{% if l.count %}{{ l.count }}{% else %}<span class="badge b-cancelled">none yet</span>{% endif %}</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+</div>
+</div>
+
+<div class="tabpane" id="pane-list">
+  <div class="panel" style="overflow-x:auto">
+    <h2 style="margin-top:0">Ranked list</h2>
+    <table>
+      <thead><tr><th>School</th><th>Need</th><th>Ready to receive</th><th>Box</th><th>Open needs</th></tr></thead>
+      <tbody>
+      {% for c in view.cases %}
+      <tr class="clickable" onclick="location.href='/threads/{{ c.thread.id }}'">
+        <td><strong>{{ c.score.name }}</strong><br><span class="small muted">{{ [c.score.town, c.score.region]|select|join(", ") }}{% if c.score.students %} · {{ c.score.students }} pupils{% endif %}</span></td>
+        <td>{{ ui.meter(c.score.need, "need") }} <span class="small">{{ c.score.need }}</span></td><td>{{ ui.meter(c.score.readiness, "readiness") }} <span class="small">{{ c.score.readiness }}</span></td>
+        <td><span class="badge q-{{ c.score.quadrant }}" style="background:var(--q); color:var(--qt)">{{ c.score.quadrant_label }}</span></td>
+        <td>{{ c.open_tickets }}</td>
+      </tr>
+      {% else %}<tr><td colspan="5" class="muted">No approved school cases yet. Approve a school's draft in the inbox and it appears here.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var tabs = document.querySelectorAll(".tabs a");
+  function show(name) {
+    tabs.forEach(function (a) { a.classList.toggle("on", a.dataset.tab === name); });
+    document.querySelectorAll(".tabpane").forEach(function (p) { p.classList.toggle("on", p.id === "pane-" + name); });
+  }
+  tabs.forEach(function (a) { a.addEventListener("click", function (e) { e.preventDefault(); history.replaceState(null, "", "#" + a.dataset.tab); show(a.dataset.tab); }); });
+  var h = location.hash.replace("#", "");
+  if (["matrix", "map", "list"].indexOf(h) >= 0) show(h);
+})();
+</script>
 {% endblock %}
