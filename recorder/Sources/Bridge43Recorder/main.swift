@@ -263,6 +263,7 @@ func runProcess(_ path: String, _ arguments: [String]) -> (Int32, String) {
     p.executableURL = URL(fileURLWithPath: path)
     p.arguments = arguments
     let out = Pipe()
+    p.standardInput = FileHandle.nullDevice   // ffmpeg otherwise waits on the terminal's keyboard and hangs
     p.standardOutput = out
     p.standardError = out
     do { try p.run() } catch { return (-1, error.localizedDescription) }
@@ -307,7 +308,7 @@ func mix(_ rec: CallRecording, ffmpeg: String) -> URL? {
     if fm.fileExists(atPath: rec.otherURL.path), let s = rec.otherStart { inputs.append((rec.otherURL, s - t0)) }
     if fm.fileExists(atPath: rec.meURL.path), let s = rec.meStart { inputs.append((rec.meURL, s - t0)) }
     guard !inputs.isEmpty else { return nil }
-    var a: [String] = ["-y", "-loglevel", "error"]
+    var a: [String] = ["-nostdin", "-y", "-loglevel", "error"]
     for (url, _) in inputs { a += ["-i", url.path] }
     var chains: [String] = []
     for (i, (_, offset)) in inputs.enumerated() {
