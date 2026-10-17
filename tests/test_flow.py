@@ -478,3 +478,15 @@ def test_desktop_messages_new_school_chat_becomes_case_with_context(client, fake
     items = db.thread_items(db.get_thread_by_case(body["case_number"])["id"])
     assert [i["body"] for i in items] == ["Good evening", "Our school roof is leaking, can PS43 help?"]
     assert _post_chat(client, {"chat_id": "x", "messages": [{"id": 1, "text": "hi"}]}, token="bad").status_code == 401
+
+
+def test_seed_demo_on_empty_database_only(fakes, monkeypatch):
+    from app import db
+    from app.main import seed_demo_if_empty
+    assert seed_demo_if_empty() is False            # off unless SEED_DEMO is set
+    monkeypatch.setenv("SEED_DEMO", "true")
+    assert seed_demo_if_empty() is True
+    n = len(db.list_threads())
+    assert n >= 2
+    assert seed_demo_if_empty() is False            # never again once there are cases
+    assert len(db.list_threads()) == n

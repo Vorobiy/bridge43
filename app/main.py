@@ -21,12 +21,30 @@ log = logging.getLogger("bridge43")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
+    seed_demo_if_empty()
     requeued = pipeline.process_pending()
     if requeued:
         log.info("re-queued %d unfinished items", requeued)
     for problem in config_problems():
         log.warning("config: %s", problem)
     yield
+
+
+def seed_demo_if_empty() -> bool:
+    """SEED_DEMO=true: load the made-up demo cases when the database is empty (e.g. a fresh Railway deploy),
+    so the hosted inbox shows the same demo as a laptop that ran scripts/seed_demo.py. Never touches real cases."""
+    if os.getenv("SEED_DEMO", "").strip().lower() not in ("1", "true", "yes", "on"):
+        return False
+    if db.list_threads():
+        return False
+    try:
+        from scripts import seed_demo
+        seed_demo.main()
+        log.info("database was empty: demo data loaded (SEED_DEMO)")
+        return True
+    except Exception:
+        log.exception("could not load the demo data")
+        return False
 
 
 def config_problems() -> list[str]:
