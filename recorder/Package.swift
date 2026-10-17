@@ -12,6 +12,7 @@ let package = Package(
                 .linkedFramework("ScreenCaptureKit"),
                 .linkedFramework("CoreAudio"),
                 .linkedFramework("AVFoundation"),
+                .linkedLibrary("sqlite3"),
             ]
         )
     ]

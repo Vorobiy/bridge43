@@ -30,6 +30,8 @@ struct Settings: Codable {
     /// The other side must speak for at least this long, or it was not a call.
     var minOtherSideSpeechSeconds = 3.0
     var ffmpegPath = "/opt/homebrew/bin/ffmpeg"
+    /// Also send new WhatsApp Desktop messages (texts, voice notes, photos) to Bridge43. Missing = on.
+    var syncMessages: Bool? = true
 }
 
 let home = FileManager.default.homeDirectoryForCurrentUser
@@ -560,6 +562,11 @@ func check(_ settings: Settings) async {
         log("❌ No recording permission: System Settings → Privacy & Security → Screen & System Audio Recording → allow Bridge43 Recorder (or Terminal), then reopen it.")
     }
     log("Apps using the microphone right now: \(MicWatcher.appsUsingMic())")
+    if let problem = messageAccessProblem() {
+        log("❌ WhatsApp messages: \(problem). System Settings → Privacy & Security → Full Disk Access → turn on Bridge43 Recorder (or Terminal), then reopen it.")
+    } else {
+        log("✅ WhatsApp messages readable (new texts, voice notes and photos go to Bridge43)")
+    }
     if let url = URL(string: settings.serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/recorder/ping") {
         var req = URLRequest(url: url)
         req.setValue("Bearer \(settings.token)", forHTTPHeaderField: "Authorization")
@@ -658,6 +665,7 @@ if args.contains("--check") || args.contains("--cli") || args.contains("--debug"
             await check(settings)
             exit(0)
         }
+        if settings.syncMessages != false { Task.detached { await watchMessages() } }
         await watch()
     }
     RunLoop.main.run()

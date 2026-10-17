@@ -34,6 +34,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var recent: [RecentCase] = []
     private var recentError: String?
     private var timer: Timer?
+    private var messageStatus: MessageSyncStatus = .off
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -49,6 +50,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Task { await self?.loadRecent() }
         }
         logListener = { [weak self] line in self?.lastLine = line }
+        messageStatusListener = { [weak self] s in Task { @MainActor in self?.messageStatus = s } }
 
         refreshIcon()
         // First launch: start automatically at every login, so opening the Mac is enough
@@ -60,6 +62,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             askForServer(first: true)
         }
         Task { await watch() }
+        Task.detached { await watchMessages() }
         Task { await self.loadRecent() }
         // keep the recording timer and the case list fresh
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
@@ -117,6 +120,20 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             case .failed: menu.addItem(disabled("Last call not sent (\(time)): saved on this Mac"))
             }
         }
+        switch messageStatus {
+        case .off:
+            menu.addItem(disabled("WhatsApp messages: not sent"))
+        case .noAccess:
+            menu.addItem(action("WhatsApp messages: allow Full Disk Access…", #selector(openFullDiskAccess)))
+        case .error(let e):
+            menu.addItem(disabled("WhatsApp messages: \(e.prefix(60))"))
+        case .ok(let last):
+            if let last {
+                menu.addItem(disabled("Last messages: \(last)"))
+            } else {
+                menu.addItem(disabled("Watching WhatsApp messages"))
+            }
+        }
         let pending = pendingRecordings()
         if pending > 0 {
             menu.addItem(action("Send \(pending) saved recording\(pending == 1 ? "" : "s") to Bridge43", #selector(retry)))
@@ -143,6 +160,9 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         let pause = action(paused ? "Resume recording calls" : "Pause recording calls", #selector(togglePause))
         menu.addItem(pause)
+        let sync = action("Send WhatsApp messages to Bridge43", #selector(toggleMessages))
+        sync.state = settings.syncMessages == false ? .off : .on
+        menu.addItem(sync)
         let login = action("Start at login", #selector(toggleLogin))
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(login)
@@ -166,7 +186,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func statusLabel(_ s: String) -> String {
         ["open": "collecting", "draft_ready": "needs review", "approved": "approved",
-         "closed": "closed", "rejected": "rejected"][s] ?? s
+         "closed": "closed", "rejected": "rejected", "not_relevant": "not relevant"][s] ?? s
     }
 
     private func disabled(_ title: String) -> NSMenuItem {
@@ -219,6 +239,21 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if case .recording = state {} else { state = paused ? .paused : .watching }
         log(paused ? "Paused" : "Resumed")
         refreshIcon()
+    }
+
+    @objc private func toggleMessages() {
+        settings.syncMessages = settings.syncMessages == false
+        saveSettings(settings)
+        if settings.syncMessages == false { messageStatus = .off }
+        log(settings.syncMessages == false ? "WhatsApp messages: off" : "WhatsApp messages: on")
+    }
+
+    @objc private func openFullDiskAccess() {
+        if let url = URL(string: fullDiskAccessSettings) { NSWorkspace.shared.open(url) }
+        alert("Let Bridge43 read WhatsApp messages",
+              "In the window that opened, turn on Bridge43 Recorder under Full Disk Access " +
+              "(click + and pick it from your Applications folder if it isn't listed), then quit and reopen Bridge43 Recorder.\n\n" +
+              "Only one-to-one chats are read. Chats that aren't about schools or logistics are not stored.")
     }
 
     @objc private func toggleLogin() {

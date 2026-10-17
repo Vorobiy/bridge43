@@ -5,8 +5,19 @@
 dot with a timer while a WhatsApp call is recorded, then files the call into Bridge43 (your Railway server).
 Its menu shows the last filed call, the latest cases (click to open), *Open Bridge43 inbox*, *Pause*,
 *Start at login* (switched on automatically), *Server address…* and *Check setup…*. It reads the server address
-and token from `~/.bridge43/recorder.json`. Messages, photos and voice notes don't need the Mac at all: they
-reach Railway through Twilio. The terminal version below still works (`--cli`, `--check`, `--debug`).
+and token from `~/.bridge43/recorder.json`. The terminal version below still works (`--cli`, `--check`, `--debug`).
+
+**WhatsApp messages too.** The app also reads new messages in WhatsApp Desktop (texts, voice notes, photos,
+videos, documents) every 20 seconds and sends them to Bridge43:
+- someone who already has a case (e.g. they called first): their messages are added to that case and the
+  draft updates itself;
+- a new chat: Bridge43 asks the AI whether it is about schools or logistics. Only then is a case opened;
+  personal chats are not stored anywhere. Group chats, status updates and channels are never read.
+
+This needs **Full Disk Access** (macOS protects WhatsApp's data): System Settings → Privacy & Security →
+Full Disk Access → turn on *Bridge43 Recorder* (click + and pick it in `~/Applications` if it isn't listed),
+then quit and reopen it. The menu shows *Watching WhatsApp messages* when it works. Turn it off with
+*Send WhatsApp messages to Bridge43* in the menu. After rebuilding the app, macOS may need the permission again.
 
 
 Automatic note-taking for WhatsApp calls on a PS43 laptop, like Otter for Google Meet, but nothing

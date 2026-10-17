@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from app import db, summary
+from app import db, summary, triage
 from app.config import settings
 from app.processing import pipeline, transcribe, vision
 
@@ -13,6 +13,7 @@ class Fakes:
     def __init__(self):
         self.model_calls: list[str] = []
         self.model_output: dict | None = None
+        self.triage_calls: list[str] = []
 
 
 @pytest.fixture
@@ -61,6 +62,13 @@ def fakes(tmp_path, monkeypatch):
         }
 
     monkeypatch.setattr(summary, "call_model", fake_model)
+
+    def fake_triage(conversation: str):
+        f.triage_calls.append(conversation)
+        low = conversation.lower()
+        return any(w in low for w in ("school", "école", "roof", "toit", "bancs", "truck", "cement")), "fake"
+
+    monkeypatch.setattr(triage, "is_relevant", fake_triage)
     return f
 
 

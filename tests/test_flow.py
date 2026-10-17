@@ -414,3 +414,67 @@ def test_recent_cases_api(client, monkeypatch):
     client.post("/intake/notes", data={"contact_name": "Lycée Recent", "notes": "roof"})
     r = client.get("/api/recorder/recent?limit=3", headers={"Authorization": "Bearer tok"}).json()
     assert r[0]["name"] == "Lycée Recent" and r[0]["case_number"].startswith("PS43-") and "/threads/" in r[0]["url"]
+
+
+# ------------------------------------------------- WhatsApp Desktop messages from the Mac app
+
+def _post_chat(client, chat, files=None, token="tok"):
+    import json as _json
+    return client.post("/api/recorder/messages", data={"chat": _json.dumps(chat)},
+                       files=files or [], headers={"Authorization": f"Bearer {token}"})
+
+
+def test_desktop_messages_update_existing_case_and_skip_personal_chats(client, fakes, monkeypatch):
+    from app import db
+    from app.config import settings
+    monkeypatch.setattr(settings, "recorder_token", "tok")
+
+    # a WhatsApp call from this number already made a case
+    r = client.post("/api/recorder/calls", data={"contact": "Mr Fon +237 670 000 001", "duration_seconds": "60"},
+                    files={"file": ("call.m4a", b"audio-bytes", "audio/mp4")}, headers={"Authorization": "Bearer tok"})
+    case = r.json()["case_number"]
+
+    # 1. a personal chat is screened out and nothing is stored
+    r = _post_chat(client, {"chat_id": "16470000000@s.whatsapp.net", "phone": "+16470000000", "name": "Mom",
+                            "messages": [{"id": 1, "at": "2026-10-17T18:00:00Z", "from_me": False, "kind": "text",
+                                          "text": "Dinner at 7?"}]})
+    assert r.status_code == 200 and r.json()["filed"] is False
+    with db.tx() as conn:
+        assert conn.execute("SELECT 1 FROM contacts WHERE address = '+16470000000'").fetchone() is None
+    assert all("Mom" != (t["display_name"] or "") for t in db.list_threads())
+
+    # 2. a text from the caller joins the existing case without screening, even if it is small talk
+    calls_before = len(fakes.triage_calls)
+    r = _post_chat(client, {"chat_id": "237670000001@s.whatsapp.net", "phone": "237670000001", "name": "Mr Fon",
+                            "messages": [{"id": 7, "at": "2026-10-17T18:05:00Z", "from_me": False, "kind": "text",
+                                          "text": "Thanks for calling"},
+                                         {"id": 8, "at": "2026-10-17T18:06:00Z", "from_me": False, "kind": "audio",
+                                          "file": "8.opus"}]},
+                   files=[("files", ("8.opus", b"opus-bytes", "audio/ogg"))])
+    body = r.json()
+    assert body["filed"] is True and body["case_number"] == case and body["created"] == 2
+    assert len(fakes.triage_calls) == calls_before
+    thread = db.get_thread_by_case(case)
+    items = db.thread_items(thread["id"])
+    assert {i["kind"] for i in items} >= {"text", "audio"}
+    assert any("le toit fuit" in (i["extracted_text"] or "") for i in items if i["kind"] == "audio")
+
+    # the same messages sent again are not duplicated
+    _post_chat(client, {"chat_id": "237670000001@s.whatsapp.net", "phone": "237670000001", "name": "Mr Fon",
+                        "messages": [{"id": 7, "at": "2026-10-17T18:05:00Z", "kind": "text", "text": "Thanks for calling"}]})
+    assert len(db.thread_items(thread["id"])) == len(items)
+
+
+def test_desktop_messages_new_school_chat_becomes_case_with_context(client, fakes, monkeypatch):
+    from app import db
+    from app.config import settings
+    monkeypatch.setattr(settings, "recorder_token", "tok")
+    r = _post_chat(client, {"chat_id": "237699000002@s.whatsapp.net", "phone": "+237699000002", "name": "GBHS Bali",
+                            "context": [{"id": 1, "at": "2026-10-17T17:00:00Z", "kind": "text", "text": "Good evening"}],
+                            "messages": [{"id": 2, "at": "2026-10-17T17:01:00Z", "kind": "text",
+                                          "text": "Our school roof is leaking, can PS43 help?"}]})
+    body = r.json()
+    assert body["filed"] is True and body["case_number"].startswith("PS43-")
+    items = db.thread_items(db.get_thread_by_case(body["case_number"])["id"])
+    assert [i["body"] for i in items] == ["Good evening", "Our school roof is leaking, can PS43 help?"]
+    assert _post_chat(client, {"chat_id": "x", "messages": [{"id": 1, "text": "hi"}]}, token="bad").status_code == 401
