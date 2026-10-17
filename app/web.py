@@ -45,10 +45,16 @@ def _meta(item: dict) -> dict:
 # ------------------------------------------------------------------ inbox
 
 @router.get("/", response_class=HTMLResponse)
-def inbox(request: Request, status: str | None = None):
+def inbox(request: Request, status: str | None = None, q: str = ""):
     threads = db.list_threads(status)
-    counts = {s: sum(1 for t in db.list_threads() if t["status"] == s) for s in ("open", "draft_ready", "approved", "rejected")}
-    return templates.TemplateResponse(request, "inbox.html", _ctx(request, threads=threads, status=status, counts=counts))
+    if q.strip():
+        needle = q.strip().lower()
+        threads = [t for t in threads if needle in " ".join(
+            str(t.get(k) or "") for k in ("case_number", "display_name", "address", "title")).lower()]
+    everything = db.list_threads()
+    counts = {s: sum(1 for t in everything if t["status"] == s)
+              for s in ("open", "draft_ready", "approved", "closed", "rejected")}
+    return templates.TemplateResponse(request, "inbox.html", _ctx(request, threads=threads, status=status, counts=counts, q=q))
 
 
 # ------------------------------------------------------------------ intake by staff
@@ -113,7 +119,9 @@ def thread_page(request: Request, thread_id: int, msg: str | None = None, error:
         request, thread=thread, contact=contact, items=items, summary=summary, in_flight=in_flight,
         new_since=new_since, msg=msg, error=error, need_categories=NEED_CATEGORIES, readiness_keys=READINESS_KEYS,
         summary_json=json.dumps(summary["data"], indent=2, ensure_ascii=False) if summary else "",
-        twilio_enabled=settings.twilio_enabled, can_message=contact["address"].startswith(("whatsapp:", "+"))))
+        twilio_enabled=settings.twilio_enabled, can_message=db.is_messageable(contact.get("reply_to") or contact["address"]),
+        reply_to=contact.get("reply_to") or contact["address"], channels=sorted({i["channel"] for i in items}),
+        other_cases=[t for t in db.list_threads() if t["id"] != thread_id]))
 
 
 def _back(thread_id: int, **q: str) -> RedirectResponse:
@@ -125,7 +133,7 @@ def _back(thread_id: int, **q: str) -> RedirectResponse:
 @router.post("/threads/{thread_id}/summarize")
 async def summarize_now(thread_id: int):
     try:
-        result = await run_in_threadpool(summarize_thread, thread_id)
+        result = await run_in_threadpool(summarize_thread, thread_id, True)
     except Exception as exc:
         return _back(thread_id, error=f"AI draft failed: {exc}"[:400])
     return _back(thread_id, msg="New AI draft ready." if result else "Nothing to summarise yet.")
@@ -197,11 +205,11 @@ def approve(summary_id: int, notes: str = Form(""), who: str = Depends(staff)):
     s = _summary_for(summary_id)
     if s["status"] != "draft":
         return _back(s["thread_id"], error="This draft was already reviewed.")
-    case_number = db.next_case_number()
+    case_number = db.get_thread(s["thread_id"])["case_number"]
     db.update_summary(summary_id, status="approved", reviewer=who, review_notes=notes.strip() or None,
                       reviewed_at=db.now(), case_number=case_number)
-    db.set_thread(s["thread_id"], status="approved")
-    return _back(s["thread_id"], msg=f"Approved as case {case_number}.")
+    db.set_thread(s["thread_id"], status="approved", stale_summary=0)
+    return _back(s["thread_id"], msg=f"Case {case_number} approved. New messages from this contact keep coming into it.")
 
 
 @router.post("/summaries/{summary_id}/reject")
@@ -212,7 +220,7 @@ def reject(summary_id: int, notes: str = Form(""), who: str = Depends(staff)):
     db.update_summary(summary_id, status="rejected", reviewer=who, review_notes=notes.strip() or None,
                       reviewed_at=db.now())
     db.set_thread(s["thread_id"], status="rejected")
-    return _back(s["thread_id"], msg="Rejected. New messages from this contact will start a fresh thread.")
+    return _back(s["thread_id"], msg="Rejected. New messages from this contact will open a new case.")
 
 
 @router.post("/summaries/{summary_id}/send-confirmation")
@@ -223,14 +231,59 @@ async def send_confirmation(summary_id: int, text: str = Form(...), who: str = D
     if contact["consent_status"] == "opted_out":
         return _back(thread["id"], error="This contact opted out.")
     try:
-        sid = await run_in_threadpool(twilio.send_message, contact["address"], text.strip())
+        sid = await run_in_threadpool(twilio.send_message, contact.get("reply_to") or contact["address"], text.strip())
     except twilio.SendError as exc:
         return _back(thread["id"], error=f"Not sent: {exc}")
-    db.add_item(contact_id=contact["id"], channel="whatsapp" if contact["address"].startswith("whatsapp:") else "sms",
+    to = contact.get("reply_to") or contact["address"]
+    db.add_item(contact_id=contact["id"], channel="whatsapp" if to.startswith("whatsapp:") else "sms",
                 kind="text", direction="out", author=who, body=f"[Confirmation sent] {text.strip()}",
                 external_id=sid or None, status="processed", thread_id=thread["id"])
     db.update_summary(summary_id, confirmation_sent_at=db.now())
     return _back(thread["id"], msg="Confirmation sent. The contact's reply will appear in this thread.")
+
+
+# ------------------------------------------------------------------ organising cases
+
+@router.post("/threads/{thread_id}/close")
+def close_case(thread_id: int):
+    t = db.get_thread(thread_id) or _404()
+    db.set_thread(thread_id, status="closed")
+    return _back(thread_id, msg=f"Case {t['case_number']} closed. The contact's next message opens a new case.")
+
+
+@router.post("/threads/{thread_id}/reopen")
+def reopen_case(thread_id: int):
+    t = db.get_thread(thread_id) or _404()
+    s = db.latest_summary(thread_id)
+    db.set_thread(thread_id, status="approved" if s and s["status"] == "approved" else
+                  ("draft_ready" if s and s["status"] == "draft" else "open"))
+    return _back(thread_id, msg=f"Case {t['case_number']} reopened.")
+
+
+@router.post("/threads/{thread_id}/merge")
+def merge_case(thread_id: int, into: str = Form(...)):
+    target = db.get_thread_by_case(into)
+    if not target:
+        return _back(thread_id, error=f"No case numbered {into}.")
+    if target["id"] == thread_id:
+        return _back(thread_id, error="That is this case.")
+    src = db.get_thread(thread_id) or _404()
+    n = db.merge_threads(thread_id, target["id"])
+    return _back(target["id"], msg=f"Moved {n} item(s) from {src['case_number']} into this case.")
+
+
+@router.post("/items/{item_id}/move")
+def move_item(item_id: int, into: str = Form(...)):
+    item = db.get_item(item_id) or _404()
+    target = db.get_thread_by_case(into)
+    if not target:
+        return _back(item["thread_id"], error=f"No case numbered {into}.")
+    db.move_item(item_id, target["id"])
+    return _back(item["thread_id"], msg=f"Moved I{item_id} to {target['case_number']}.")
+
+
+def _404():
+    raise HTTPException(404)
 
 
 # ------------------------------------------------------------------ media + JSON API
@@ -265,6 +318,6 @@ def api_cases(status: str = "approved"):
     for t in db.list_threads():
         s = db.latest_summary(t["id"])
         if s and s["status"] == status:
-            out.append({"case_number": s["case_number"], "thread_id": t["id"], "contact": t["address"],
+            out.append({"case_number": t["case_number"], "thread_id": t["id"], "contact": t["address"],
                         "reviewed_by": s["reviewer"], "reviewed_at": s["reviewed_at"], "case": s["data"]})
     return JSONResponse(out)

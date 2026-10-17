@@ -225,10 +225,15 @@ def build_prompt(items: list[dict], contact: dict) -> str:
     )
 
 
-def summarize_thread(thread_id: int) -> dict | None:
-    """Generate a new draft for the thread. Returns the stored summary row, or None if nothing to do."""
+def summarize_thread(thread_id: int, manual: bool = False) -> dict | None:
+    """Generate a new draft for the case. Returns the stored summary row, or None if nothing to do.
+
+    Approved cases keep collecting material; they are only re-drafted when staff ask (manual=True).
+    """
     thread = db.get_thread(thread_id)
-    if not thread or thread["status"] in ("approved", "rejected"):
+    if not thread or thread["status"] in ("rejected", "closed"):
+        return None
+    if thread["status"] == "approved" and not manual:
         return None
     items = [i for i in db.thread_items(thread_id) if i["status"] in ("processed", "failed")]
     if not items:

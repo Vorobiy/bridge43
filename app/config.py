@@ -77,9 +77,9 @@ class Settings:
     # Consent: if true, nothing a new contact sends is processed until they reply YES/OUI.
     require_explicit_consent: bool = field(default_factory=lambda: _bool("REQUIRE_EXPLICIT_CONSENT", False))
 
-    # A contact's messages are grouped into one intake thread until it is approved/rejected
-    # or goes quiet for this many hours.
-    thread_idle_hours: int = field(default_factory=lambda: _int("THREAD_IDLE_HOURS", 72))
+    # Everything from one contact goes into one case until staff close it. Set THREAD_IDLE_HOURS > 0
+    # to also start a new case automatically after that many hours without contact (0 = never).
+    thread_idle_hours: int = field(default_factory=lambda: _int("THREAD_IDLE_HOURS", 0))
 
     @property
     def media_dir(self) -> Path:

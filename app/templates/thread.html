@@ -29,9 +29,26 @@
 {% block body %}
 <p class="small"><a href="/">← Inbox</a></p>
 <div class="row" style="align-items:baseline">
-  <h1 style="flex:3">{{ contact.display_name or contact.address }}
-    <span class="badge b-{{ thread.status }}">{{ {"open":"collecting","draft_ready":"needs review","approved":"approved","rejected":"rejected"}[thread.status] }}</span></h1>
-  <div class="muted small" style="flex:2; text-align:right">{{ contact.address }} · consent: {{ contact.consent_status }}{% if contact.language %} · {{ contact.language }}{% endif %}</div>
+  <h1 style="flex:3"><span class="muted" style="font-weight:600">{{ thread.case_number }}</span> · {{ contact.display_name or contact.address }}
+    <span class="badge b-{{ thread.status }}">{{ {"open":"collecting","draft_ready":"needs review","approved":"approved","closed":"closed","rejected":"rejected"}[thread.status] }}</span></h1>
+  <div class="muted small" style="flex:2; text-align:right">{{ contact.address }}{% if reply_to != contact.address %} · replies via {{ reply_to }}{% endif %} · consent: {{ contact.consent_status }}{% if contact.language %} · {{ contact.language }}{% endif %}</div>
+</div>
+<div class="panel small" style="margin-bottom:14px; display:flex; gap:14px; flex-wrap:wrap; align-items:center">
+  <span>All of this contact's messages, voice notes, photos, videos and calls are collected in this case
+    ({{ items|length }} items{% if channels %}: {{ channels|join(", ") }}{% endif %}).</span>
+  <span style="flex:1"></span>
+  {% if thread.status in ("closed", "rejected") %}
+    <form method="post" action="/threads/{{ thread.id }}/reopen"><button type="submit">Reopen case</button></form>
+  {% else %}
+    <form method="post" action="/threads/{{ thread.id }}/close" onsubmit="return confirm('Close this case? The contact\'s next message will open a new case.')"><button type="submit">Close case</button></form>
+  {% endif %}
+  <details><summary style="margin:0">Merge into another case</summary>
+    <form method="post" action="/threads/{{ thread.id }}/merge" class="row" style="margin-top:8px; min-width:320px">
+      <div style="flex:3"><select name="into">{% for t in other_cases %}<option value="{{ t.case_number }}">{{ t.case_number }} · {{ t.display_name or t.address }}</option>{% endfor %}</select></div>
+      <div style="flex:0 0 auto"><button type="submit" {% if not other_cases %}disabled{% endif %}>Merge</button></div>
+    </form>
+    <p class="muted" style="margin:4px 0 0">Use this when the same school reached you from two numbers or names.</p>
+  </details>
 </div>
 
 {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
@@ -65,6 +82,14 @@
       <div class="extracted"><span class="muted small">{{ {"audio":"Transcript","image":"AI photo description","video":"Video (transcript + AI description)","document":"Document summary"}.get(it.kind, "Extracted") }}:</span>
 {{ it.extracted_text }}</div>
     {% endif %}
+    {% if other_cases %}
+    <details class="small" style="margin-top:4px"><summary style="margin:0; font-weight:500" class="muted">Move to another case</summary>
+      <form method="post" action="/items/{{ it.id }}/move" class="row" style="margin-top:4px">
+        <div style="flex:3"><select name="into">{% for t in other_cases %}<option value="{{ t.case_number }}">{{ t.case_number }} · {{ t.display_name or t.address }}</option>{% endfor %}</select></div>
+        <div style="flex:0 0 auto"><button type="submit">Move</button></div>
+      </form>
+    </details>
+    {% endif %}
     {% if it.status == "failed" %}
       <div class="small" style="color:var(--bad); margin-top:6px">{{ it.error }}</div>
       <form method="post" action="/threads/{{ thread.id }}/items/{{ it.id }}/retry"><button class="small" type="submit">Retry</button></form>
@@ -89,7 +114,7 @@
         <span class="badge b-{{ d.case_type }}">{{ d.case_type }}</span>
         <span class="badge">confidence: {{ d.confidence }}</span>
         <span class="badge b-{{ 'approved' if summary.status == 'approved' else ('rejected' if summary.status == 'rejected' else 'draft_ready') }}">
-          {% if summary.status == "approved" %}approved · {{ summary.case_number }}{% elif summary.status == "rejected" %}rejected{% else %}AI draft v{{ summary.version }} · not yet reviewed{% endif %}</span>
+          {% if summary.status == "approved" %}approved{% elif summary.status == "rejected" %}rejected{% else %}AI draft v{{ summary.version }} · not yet reviewed{% endif %}</span>
       </div>
       {% if summary.status == "draft" %}
       <form style="flex:0 0 auto" method="post" action="/threads/{{ thread.id }}/summarize"
@@ -199,7 +224,7 @@
     </form>
   </div>
   {% elif summary.status == "approved" %}
-  <div class="flash ok" style="margin-top:16px">Approved as <strong>{{ summary.case_number }}</strong> by {{ summary.reviewer }} on {{ summary.reviewed_at[:16].replace("T", " ") }}.{% if summary.review_notes %} Note: {{ summary.review_notes }}{% endif %}
+  <div class="flash ok" style="margin-top:16px">Case <strong>{{ thread.case_number }}</strong> approved by {{ summary.reviewer }} on {{ summary.reviewed_at[:16].replace("T", " ") }}.{% if summary.review_notes %} Note: {{ summary.review_notes }}{% endif %}
     Available to the next stage at <a href="/api/threads/{{ thread.id }}">/api/threads/{{ thread.id }}</a>.</div>
   {% else %}
   <div class="flash err" style="margin-top:16px">Rejected by {{ summary.reviewer }}.{% if summary.review_notes %} Note: {{ summary.review_notes }}{% endif %}</div>
@@ -213,7 +238,7 @@
     <form method="post" action="/summaries/{{ summary.id }}/send-confirmation">
       <textarea name="text" maxlength="1500">{{ d.confirmation_message.text }}</textarea>
       <p class="actions">
-        <button type="submit" {% if not (twilio_enabled and can_message) %}disabled{% endif %}>Send on {{ "WhatsApp" if contact.address.startswith("whatsapp:") else "SMS" }}</button>
+        <button type="submit" {% if not (twilio_enabled and can_message) %}disabled{% endif %}>Send on {{ "WhatsApp" if reply_to.startswith("whatsapp:") else "SMS" }}</button>
         {% if not twilio_enabled %}<span class="small muted">Twilio is not set up yet: copy the text and send it from your phone.</span>
         {% elif not can_message %}<span class="small muted">No phone number on this contact.</span>{% endif %}
       </p>

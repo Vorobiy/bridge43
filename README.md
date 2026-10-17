@@ -35,6 +35,14 @@ internet, storage, road access, trained staff, space), numbers, people as named,
 open questions, safety flags, and a confirmation message in the contact's own language. Every fact
 cites the source items (`I12`), which link to the original message, photo or call on the review screen.
 
+**One case per contact:** every contact gets a case number (`PS43-2026-0001`) as soon as they first
+get in touch. Everything they send afterwards, on any channel (WhatsApp texts, voice notes, photos, videos,
+SMS, calls through Twilio or the Mac call recorder, KoBo forms, staff notes), is filed in that same case.
+People are matched by phone number, so the same number on WhatsApp and SMS is one person, and by name
+when there is no number, which covers WhatsApp Desktop calls. Approved cases keep collecting; staff
+**close** a case to start a fresh one, and can **move** an item or **merge** two cases when one school used two
+numbers. Search the inbox by case number, name or phone.
+
 **Human check:** staff edit, approve (creates case number `PS43-2026-0001`) or reject, and can send the
 confirmation message back on WhatsApp/SMS. Approved cases are available at `GET /api/cases` for the next stage.
 

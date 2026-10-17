@@ -9,6 +9,7 @@ from app.config import settings
 
 
 def _thread_for(address):
+    address = db.canonical_address(address)
     return max((t for t in db.list_threads() if t["address"] == address), key=lambda t: t["id"])
 
 
@@ -152,13 +153,21 @@ def test_export_upload_to_approved_case(client, fakes):
     assert s["data"]["situation"]["text"] == "Edited." and s["data"]["open_questions"] == ["Roof size?", "Budget?"]
     client.post(f"/summaries/{s['id']}/approve", data={"notes": "checked"})
     s = db.get_summary(s["id"])
-    assert s["status"] == "approved" and s["case_number"].startswith("PS43-") and s["case_number"].endswith("0001")
+    thread = db.get_thread(thread_id)
+    assert s["status"] == "approved" and s["case_number"] == thread["case_number"] and thread["case_number"].startswith("PS43-")
     cases = client.get("/api/cases").json()
     assert cases[0]["case"]["title"] == "GBHS Test - roof"
 
-    # a new message after approval starts a fresh thread
+    # an approved case keeps collecting: a later WhatsApp message lands in the same case
     client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+237670000009", "Body": "Merci !", "MessageSid": "SM9"})
-    assert _thread_for("whatsapp:+237670000009")["id"] != thread_id
+    assert _thread_for("whatsapp:+237670000009")["id"] == thread_id
+    assert db.get_thread(thread_id)["stale_summary"] == 1
+
+    # once staff close it, the next message opens a new case with a new number
+    client.post(f"/threads/{thread_id}/close")
+    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+237670000009", "Body": "Bonjour", "MessageSid": "SM9b"})
+    new = _thread_for("whatsapp:+237670000009")
+    assert new["id"] != thread_id and new["case_number"] != thread["case_number"]
 
 
 def test_staff_notes_with_recording(client):
@@ -214,5 +223,85 @@ def test_recorder_upload(client, monkeypatch):
     assert r.status_code == 200
     items = db.thread_items(r.json()["thread_id"])
     assert items[1]["channel"] == "call" and items[1]["status"] == "processed"
-    assert db.get_contact(items[0]["contact_id"])["address"] == "whatsapp:+237670000011"
+    contact = db.get_contact(items[0]["contact_id"])
+    assert contact["address"] == "+237670000011" and contact["reply_to"] == "whatsapp:+237670000011"
+    assert r.json()["case_number"] == db.get_thread(r.json()["thread_id"])["case_number"]
     assert client.get("/api/recorder/ping", headers={"Authorization": "Bearer tok"}).json() == {"ok": True}
+
+
+
+def test_every_channel_lands_in_one_case(client, monkeypatch):
+    """Text, photo, voice note, SMS, laptop call recording and KoBo form from one school = one case."""
+    from app.channels import kobo
+    monkeypatch.setattr(tw, "download", lambda url: (b"fake", "image/jpeg" if "img" in url else "audio/ogg"))
+    monkeypatch.setattr(kobo, "_download", lambda url: (b"fake", "image/jpeg"))
+    monkeypatch.setattr(settings, "recorder_token", "tok")
+    num = "+237 670 000 020"
+    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+237670000020", "Body": "Bonjour", "MessageSid": "X1", "ProfileName": "M. Ewane"})
+    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+237670000020", "Body": "", "MessageSid": "X2", "NumMedia": "2",
+                "MediaUrl0": "https://t/img", "MediaContentType0": "image/jpeg", "MediaUrl1": "https://t/voice", "MediaContentType1": "audio/ogg"})
+    client.post("/webhooks/twilio/messaging", data={"From": "+237670000020", "Body": "SMS: notre toit fuit", "MessageSid": "X3"})
+    client.post("/api/recorder/calls", headers={"Authorization": "Bearer tok"}, data={"contact": f"M. Ewane {num}"},
+                files={"file": ("call.caf", b"fake", "audio/x-caf")})
+    client.post("/webhooks/kobo", json={"_uuid": "k20", "school_phone": num, "students": 300})
+    client.post("/intake/notes", data={"contact_name": "M. Ewane", "contact_phone": num, "notes": "Visit planned"})
+
+    cases = [t for t in db.list_threads() if t["address"] == "+237670000020"]
+    assert len(cases) == 1
+    case = cases[0]
+    items = db.thread_items(case["id"])
+    assert {i["kind"] for i in items} >= {"text", "image", "audio", "form"}
+    assert {i["channel"] for i in items} >= {"whatsapp", "sms", "call", "kobo", "agent"}
+    assert case["case_number"].startswith("PS43-")
+    # confirmations go back over WhatsApp/SMS, whichever they used last
+    assert db.get_contact(case["contact_id"])["reply_to"] == "+237670000020"
+
+    # a call filed with only a name joins the same case by name
+    client.post("/api/recorder/calls", headers={"Authorization": "Bearer tok"}, data={"contact": "m. ewane"},
+                files={"file": ("call2.caf", b"fake", "audio/x-caf")})
+    assert len(db.thread_items(case["id"])) == len(items) + 2
+    page = client.get(f"/threads/{case['id']}")
+    assert case["case_number"] in page.text and "Merge into another case" in page.text
+    assert case["case_number"] in client.get("/?q=" + case["case_number"]).text
+
+
+def test_move_and_merge_cases(client):
+    a = client.post("/intake/notes", data={"contact_name": "School A", "notes": "first"}, follow_redirects=False)
+    b = client.post("/intake/notes", data={"contact_name": "School A annex", "notes": "second"}, follow_redirects=False)
+    ta, tb = (int(r.headers["location"].rsplit("/", 1)[1]) for r in (a, b))
+    case_a = db.get_thread(ta)["case_number"]
+    item = db.thread_items(tb)[0]
+    client.post(f"/items/{item['id']}/move", data={"into": case_a})
+    assert db.get_item(item["id"])["thread_id"] == ta
+    client.post("/intake/notes", data={"contact_name": "School A annex", "notes": "third"})
+    client.post(f"/threads/{tb}/merge", data={"into": case_a})
+    assert db.get_thread(tb) is None and len(db.thread_items(ta)) == 3
+
+
+def test_migration_merges_old_contacts(fakes):
+    """Databases from the earlier version: whatsapp:+X and +X were separate contacts with no case numbers."""
+    with db.tx() as conn:
+        conn.execute("INSERT INTO contacts (address, channel, created_at, updated_at) VALUES ('whatsapp:+237670000030','whatsapp','t','t')")
+        conn.execute("INSERT INTO contacts (address, channel, created_at, updated_at) VALUES ('+237670000030','sms','t','t')")
+        ids = [r[0] for r in conn.execute("SELECT id FROM contacts WHERE address LIKE '%670000030' ORDER BY id")]
+        for cid in ids:
+            conn.execute("INSERT INTO threads (contact_id, opened_at, last_item_at) VALUES (?, '2026-10-01', '2026-10-01')", (cid,))
+    db.init_db()
+    with db.tx() as conn:
+        contacts = conn.execute("SELECT * FROM contacts WHERE address LIKE '%670000030'").fetchall()
+        threads = conn.execute("SELECT * FROM threads WHERE contact_id = ?", (contacts[0]["id"],)).fetchall()
+    assert len(contacts) == 1 and contacts[0]["address"] == "+237670000030"
+    assert contacts[0]["reply_to"] == "whatsapp:+237670000030"
+    assert len(threads) == 2 and all(t["case_number"] for t in threads)
+
+
+def test_whatsapp_window_title_names_are_cleaned(client, monkeypatch):
+    assert db.clean_name("‎Connor - WhatsApp voice call") == "Connor"
+    assert db.clean_name("Lycée de Bali — Appel vocal WhatsApp") == "Lycée de Bali"
+    assert db.clean_name("Mr Fon") == "Mr Fon"
+    monkeypatch.setattr(settings, "recorder_token", "tok")
+    client.post("/intake/notes", data={"contact_name": "Connor", "notes": "earlier notes"})
+    r = client.post("/api/recorder/calls", headers={"Authorization": "Bearer tok"},
+                    data={"contact": "‎Connor - WhatsApp voice call"}, files={"file": ("c.caf", b"x", "audio/x-caf")})
+    items = db.thread_items(r.json()["thread_id"])
+    assert len(items) == 3  # notes + recorder note + recording, all in Connor's case

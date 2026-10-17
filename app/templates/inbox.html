@@ -6,25 +6,33 @@
   <h1 style="flex:2">Intake inbox</h1>
   <div style="flex:0 0 auto"><a class="btn primary" href="/intake">Add intake</a></div>
 </div>
+<form method="get" action="/" class="row" style="margin-bottom:10px">
+  <div style="flex:3"><input type="text" name="q" value="{{ q }}" placeholder="Find a case: PS43-2026-0007, school name or phone number"></div>
+  <div style="flex:0 0 auto"><button type="submit">Search</button></div>
+</form>
 <p class="small">
   <a href="/" {% if not status %}style="font-weight:700"{% endif %}>All</a> ·
   <a href="/?status=draft_ready">Needs review ({{ counts.draft_ready }})</a> ·
   <a href="/?status=open">Collecting ({{ counts.open }})</a> ·
   <a href="/?status=approved">Approved ({{ counts.approved }})</a> ·
+  <a href="/?status=closed">Closed ({{ counts.closed }})</a> ·
   <a href="/?status=rejected">Rejected ({{ counts.rejected }})</a>
 </p>
 <div class="panel" style="padding:0; overflow-x:auto">
 {% if threads %}
 <table>
-  <thead><tr><th>Contact</th><th>Case</th><th>Status</th><th>Items</th><th>Last activity</th></tr></thead>
+  <thead><tr><th>Case</th><th>Contact</th><th>Summary</th><th>Status</th><th>What's in it</th><th>Last activity</th></tr></thead>
   <tbody>
   {% for t in threads %}
   <tr class="clickable" onclick="location.href='/threads/{{ t.id }}'">
-    <td><a href="/threads/{{ t.id }}"><strong>{{ t.display_name or t.address }}</strong></a><br>
+    <td><a href="/threads/{{ t.id }}"><strong>{{ t.case_number }}</strong></a></td>
+    <td><strong>{{ t.display_name or t.address }}</strong><br>
         <span class="muted small">{{ t.address }}{% if t.consent_status == 'opted_out' %} · opted out{% endif %}</span></td>
     <td>{{ t.title or "—" }}{% if t.stale_summary %}<br><span class="badge b-held">new messages since draft</span>{% endif %}</td>
-    <td><span class="badge b-{{ t.status }}">{{ {"open":"collecting","draft_ready":"needs review","approved":"approved","rejected":"rejected"}[t.status] }}</span></td>
-    <td>{{ t.item_count }}{% if t.pending_count %} <span class="muted small">({{ t.pending_count }} processing)</span>{% endif %}
+    <td><span class="badge b-{{ t.status }}">{{ {"open":"collecting","draft_ready":"needs review","approved":"approved","closed":"closed","rejected":"rejected"}[t.status] }}</span></td>
+    <td>{{ t.item_count }} item{{ "" if t.item_count == 1 else "s" }}
+        {% if t.kinds %}<br><span class="small muted">{{ t.kinds.replace("audio", "voice/calls").replace(",", " · ") }}</span>{% endif %}
+        {% if t.pending_count %} <span class="muted small">({{ t.pending_count }} processing)</span>{% endif %}
         {% if t.failed_count %}<br><span class="badge b-failed">{{ t.failed_count }} failed</span>{% endif %}</td>
     <td class="small">{{ t.last_item_at[:16].replace("T", " ") }}</td>
   </tr>

@@ -23,8 +23,9 @@ def contact_address(name: str | None, phone: str | None) -> tuple[str, str]:
     if phone:
         if not phone.startswith("+"):
             phone = "+" + phone
-        return f"whatsapp:{phone}", "whatsapp"
-    slug = re.sub(r"[^a-z0-9]+", "-", (name or "unknown").lower()).strip("-") or "unknown"
+        return f"whatsapp:{phone}", "upload"
+    from ..db import clean_name
+    slug = re.sub(r"[^a-z0-9]+", "-", (clean_name(name) or "unknown").lower()).strip("-") or "unknown"
     return f"manual:{slug}", "upload"
 
 

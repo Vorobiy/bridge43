@@ -30,7 +30,8 @@ def _check(authorization: str | None) -> None:
 
 def split_contact(contact: str) -> tuple[str | None, str | None]:
     """'Mr Fon +237 6 70 00 00 01' -> ('Mr Fon', '+237670000001'); a bare number -> (None, number)."""
-    contact = (contact or "").strip()
+    from .db import clean_name
+    contact = clean_name(contact) or ""
     m = re.search(r"\+?\d[\d\s().-]{6,}\d", contact)
     phone = re.sub(r"[^\d+]", "", m.group(0)) if m else None
     name = (contact.replace(m.group(0), "") if m else contact).strip(" -–,:") or None
@@ -72,5 +73,7 @@ async def upload_call(
                                          content_type=file.content_type)],
         staff_name="Call recorder",
     )
+    from . import db
     return {"ok": True, "thread_id": result["thread_id"],
+            "case_number": (db.get_thread(result["thread_id"]) or {}).get("case_number"),
             "url": f"{settings.public_base_url}/threads/{result['thread_id']}"}
