@@ -11,7 +11,7 @@ call ends ─► rules (min length, skip / only lists) ─► "Send to Bridge43?
          ─► Bridge43: transcript ─► AI case draft ─► staff review
 ```
 
-**Needs:** macOS 14.4 or later (macOS 15+ to record your own voice too), Xcode Command Line Tools,
+**Needs:** macOS 14.4 or later, Xcode Command Line Tools,
 `brew install ffmpeg`, and a running Bridge43 server.
 
 ## Set up (once)
@@ -78,7 +78,7 @@ All in `~/.bridge43/recorder.json`:
   using the microphone. If WhatsApp's id doesn't contain "whatsapp", tell us what it shows.
 - **"No recording permission":** System Settings → Privacy & Security → Screen & System Audio
   Recording → enable your Terminal app, then quit Terminal completely and reopen it.
-- **Only the other person is in the recording:** you're on macOS 14; update to macOS 15+.
+- **Only the other person is in the recording:** turn on Terminal under System Settings → Privacy & Security → Microphone, then quit and reopen Terminal (`--check` shows the status).
 - **The dialog shows no name:** WhatsApp didn't expose the caller in its window title; type it in.
 
 ## Privacy

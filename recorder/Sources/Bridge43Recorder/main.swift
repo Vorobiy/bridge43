@@ -104,6 +104,29 @@ enum MicWatcher {
     }
 }
 
+// MARK: - Microphone permission
+
+enum Mic {
+    static var statusText: String {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized: return "allowed"
+        case .denied: return "denied"
+        case .restricted: return "restricted"
+        case .notDetermined: return "not asked yet"
+        @unknown default: return "unknown"
+        }
+    }
+
+    /// Asks macOS the first time (a permission dialog for Terminal appears); true if allowed.
+    static func ensurePermission() async -> Bool {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized: return true
+        case .notDetermined: return await AVCaptureDevice.requestAccess(for: .audio)
+        default: return false
+        }
+    }
+}
+
 // MARK: - Recording one call
 
 final class CallRecording: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
@@ -118,6 +141,8 @@ final class CallRecording: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
     private(set) var otherSpeechSeconds = 0.0
     private(set) var windowTitles: [String: Int] = [:]
     private(set) var micCaptured = false
+    private var micEngine: AVAudioEngine?
+    private(set) var micError: String?
     private(set) var lastOtherAudioAt = Date()
 
     var otherURL: URL { folder.appendingPathComponent("other.caf") }
@@ -147,19 +172,67 @@ final class CallRecording: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
         config.width = 2
         config.height = 2
         config.minimumFrameInterval = CMTime(value: 10, timescale: 1)
-        if #available(macOS 15.0, *) {
-            config.captureMicrophone = true
-            micCaptured = true
-        }
         let filter = SCContentFilter(display: display, including: whatsApp, exceptingWindows: [])
         let s = SCStream(filter: filter, configuration: config, delegate: self)
         try s.addStreamOutput(self, type: .audio, sampleHandlerQueue: queue)
         try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)   // frames are ignored
-        if #available(macOS 15.0, *) {
-            try s.addStreamOutput(self, type: .microphone, sampleHandlerQueue: queue)
-        }
         try await s.startCapture()
         stream = s
+        await startMicrophone()
+    }
+
+    /// Your side of the call: record the default microphone directly (works on any macOS version
+    /// and shares the mic with WhatsApp). Saved as mono so it mixes cleanly with the caller's track.
+    private func startMicrophone() async {
+        guard await Mic.ensurePermission() else {
+            micError = "no microphone permission"
+            log("⚠️  Microphone permission is off: only the caller will be recorded. " +
+                "System Settings → Privacy & Security → Microphone → turn on Terminal, then quit and reopen Terminal.")
+            return
+        }
+        let engine = AVAudioEngine()
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0,
+              let mono = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: format.sampleRate,
+                                       channels: 1, interleaved: false) else {
+            micError = "no microphone found"
+            log("⚠️  No microphone input found: only the caller will be recorded.")
+            return
+        }
+        input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, when in
+            guard let self, let src = buffer.floatChannelData, buffer.frameLength > 0,
+                  let copy = AVAudioPCMBuffer(pcmFormat: mono, frameCapacity: buffer.frameLength),
+                  let dst = copy.floatChannelData else { return }
+            copy.frameLength = buffer.frameLength
+            dst[0].update(from: src[0], count: Int(buffer.frameLength))
+            let t = when.isHostTimeValid ? AVAudioTime.seconds(forHostTime: when.hostTime)
+                                         : CMTimeGetSeconds(CMClockGetTime(CMClockGetHostTimeClock()))
+            self.queue.async { self.writeMic(copy, at: t) }
+        }
+        do {
+            engine.prepare()
+            try engine.start()
+            micEngine = engine
+            micCaptured = true
+        } catch {
+            input.removeTap(onBus: 0)
+            micError = error.localizedDescription
+            log("⚠️  Could not start the microphone (\(error.localizedDescription)): only the caller will be recorded.")
+        }
+    }
+
+    private func writeMic(_ pcm: AVAudioPCMBuffer, at time: Double) {
+        do {
+            if meFile == nil {
+                meFile = try AVAudioFile(forWriting: meURL, settings: pcm.format.settings,
+                                         commonFormat: .pcmFormatFloat32, interleaved: false)
+                meStart = time
+            }
+            try meFile?.write(from: pcm)
+        } catch {
+            log("Could not write microphone audio: \(error.localizedDescription)")
+        }
     }
 
     /// Window titles help name the caller (WhatsApp shows the contact in the call window).
@@ -180,6 +253,11 @@ final class CallRecording: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
     var likelyContact: String? { windowTitles.max { $0.value < $1.value }?.key }
 
     func stop() async {
+        if let engine = micEngine {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+            micEngine = nil
+        }
         if let s = stream { try? await s.stopCapture() }
         stream = nil
         queue.sync {
@@ -192,9 +270,7 @@ final class CallRecording: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard sampleBuffer.isValid, sampleBuffer.numSamples > 0 else { return }
         if type == .audio {
-            write(sampleBuffer, other: true)
-        } else if #available(macOS 15.0, *), type == .microphone {
-            write(sampleBuffer, other: false)
+            write(sampleBuffer)
         }
     }
 
@@ -202,7 +278,7 @@ final class CallRecording: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
         log("Recording stopped by macOS: \(error.localizedDescription)")
     }
 
-    private func write(_ sb: CMSampleBuffer, other: Bool) {
+    private func write(_ sb: CMSampleBuffer) {
         guard let desc = sb.formatDescription,
               let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(desc),
               let format = AVAudioFormat(streamDescription: asbd) else { return }
@@ -213,23 +289,14 @@ final class CallRecording: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
                                                            into: pcm.mutableAudioBufferList) == noErr else { return }
         let pts = CMTimeGetSeconds(sb.presentationTimeStamp)
         do {
-            if other {
-                if otherFile == nil {
-                    otherFile = try AVAudioFile(forWriting: otherURL, settings: format.settings,
-                                                commonFormat: format.commonFormat, interleaved: format.isInterleaved)
-                    otherStart = pts
-                }
-                try otherFile?.write(from: pcm)
-                otherSpeechSeconds += speechSeconds(pcm)
-                lastOtherAudioAt = Date()
-            } else {
-                if meFile == nil {
-                    meFile = try AVAudioFile(forWriting: meURL, settings: format.settings,
-                                             commonFormat: format.commonFormat, interleaved: format.isInterleaved)
-                    meStart = pts
-                }
-                try meFile?.write(from: pcm)
+            if otherFile == nil {
+                otherFile = try AVAudioFile(forWriting: otherURL, settings: format.settings,
+                                            commonFormat: format.commonFormat, interleaved: format.isInterleaved)
+                otherStart = pts
             }
+            try otherFile?.write(from: pcm)
+            otherSpeechSeconds += speechSeconds(pcm)
+            lastOtherAudioAt = Date()
         } catch {
             log("Could not write audio: \(error.localizedDescription)")
         }
@@ -303,10 +370,14 @@ func mix(_ rec: CallRecording, ffmpeg: String) -> URL? {
     let fm = FileManager.default
     let out = rec.folder.appendingPathComponent("call.m4a")
     var inputs: [(URL, Double)] = []
-    let starts = [rec.otherStart, rec.meStart].compactMap { $0 }
+    var starts = [rec.otherStart, rec.meStart].compactMap { $0 }
+    // Both tracks are stamped with the Mac's host clock; if they are far apart something is off,
+    // so line them up at the start instead of inserting a long silence.
+    if starts.count == 2, abs(starts[0] - starts[1]) > 5 { starts = [0, 0] }
     let t0 = starts.min() ?? 0
-    if fm.fileExists(atPath: rec.otherURL.path), let s = rec.otherStart { inputs.append((rec.otherURL, s - t0)) }
-    if fm.fileExists(atPath: rec.meURL.path), let s = rec.meStart { inputs.append((rec.meURL, s - t0)) }
+    let aligned = starts.count == 2 && starts == [0, 0]
+    if fm.fileExists(atPath: rec.otherURL.path), let s = rec.otherStart { inputs.append((rec.otherURL, aligned ? 0 : s - t0)) }
+    if fm.fileExists(atPath: rec.meURL.path), let s = rec.meStart { inputs.append((rec.meURL, aligned ? 0 : s - t0)) }
     guard !inputs.isEmpty else { return nil }
     var a: [String] = ["-nostdin", "-y", "-loglevel", "error"]
     for (url, _) in inputs { a += ["-i", url.path] }
@@ -423,8 +494,10 @@ func finish(_ rec: CallRecording, settings: Settings) async {
 func check(_ settings: Settings) async {
     log("Settings: \(settingsURL.path)")
     log("Server: \(settings.serverURL)")
-    if #unavailable(macOS 15.0) {
-        log("⚠️  macOS 14: only the other person's voice can be recorded. Update to macOS 15+ to record your side too.")
+    if await Mic.ensurePermission() {
+        log("✅ Microphone permission OK (your side of calls will be recorded)")
+    } else {
+        log("❌ Microphone permission is \(Mic.statusText): System Settings → Privacy & Security → Microphone → turn on Terminal, then quit and reopen Terminal.")
     }
     let (s, _) = runProcess(settings.ffmpegPath, ["-version"])
     log(s == 0 ? "✅ ffmpeg found" : "❌ ffmpeg not found at \(settings.ffmpegPath) (brew install ffmpeg, or fix ffmpegPath)")
