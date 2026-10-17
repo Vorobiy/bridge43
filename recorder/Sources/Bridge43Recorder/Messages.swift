@@ -46,6 +46,8 @@ struct WAMessage {
     let mediaPath: String?
     let jid: String
     let partner: String?
+    var latitude: Double? = nil
+    var longitude: Double? = nil
 
     /// text | image | video | audio | document, or nil for things we skip (stickers, system events, calls)
     var kind: String? {
@@ -55,11 +57,24 @@ struct WAMessage {
         case 2, 11: return "video"
         case 3: return "audio"
         case 8: return "document"
+        case 5: return location == nil ? nil : "text"
         default: return (text?.isEmpty == false) ? "text" : nil
         }
     }
 
     var isMedia: Bool { kind != nil && kind != "text" }
+
+    /// A shared location pin, written the way Bridge43 reads it ("Shared location: lat, lon ...").
+    var location: String? {
+        guard type == 5, let lat = latitude, let lon = longitude, (lat, lon) != (0, 0),
+              abs(lat) <= 90, abs(lon) <= 180 else { return nil }
+        let label = (text?.isEmpty == false) ? " (\(text!))" : ""
+        return String(format: "Shared location: %.6f, %.6f", lat, lon) + label +
+            String(format: " https://maps.google.com/?q=%.6f,%.6f", lat, lon)
+    }
+
+    /// What Bridge43 gets as the message text.
+    var bodyText: String { location ?? text ?? "" }
 
     /// The attachment on disk, if WhatsApp has downloaded it.
     var mediaFile: URL? {
@@ -118,6 +133,8 @@ final class ChatDB {
             let missing = cols.filter { !have.contains($0) }
             if !missing.isEmpty { throw RecorderError("WhatsApp's database changed (\(table) has no \(missing.joined(separator: ", ")))") }
         }
+        let media = try columns("ZWAMEDIAITEM")
+        hasCoordinates = media.contains("ZLATITUDE") && media.contains("ZLONGITUDE")
     }
 
     static func str(_ s: OpaquePointer, _ i: Int32) -> String? {
@@ -140,23 +157,30 @@ final class ChatDB {
         }
     }
 
-    private static let select = """
+    /// Location pins keep their coordinates in the media item; older/newer WhatsApp versions may not have them.
+    private var hasCoordinates = false
+
+    private var select: String { """
         SELECT m.Z_PK, m.ZCHATSESSION, m.ZISFROMME, m.ZMESSAGETYPE, m.ZMESSAGEDATE, m.ZTEXT,
-               mi.ZMEDIALOCALPATH, s.ZCONTACTJID, s.ZPARTNERNAME
+               mi.ZMEDIALOCALPATH, s.ZCONTACTJID, s.ZPARTNERNAME,
+               \(hasCoordinates ? "mi.ZLATITUDE, mi.ZLONGITUDE" : "NULL, NULL")
         FROM ZWAMESSAGE m
         JOIN ZWACHATSESSION s ON s.Z_PK = m.ZCHATSESSION
         LEFT JOIN ZWAMEDIAITEM mi ON mi.Z_PK = m.ZMEDIAITEM
-        """
+        """ }
 
     private func messages(_ whereSQL: String, _ binds: [Double]) throws -> [WAMessage] {
         var out: [WAMessage] = []
-        try query(ChatDB.select + " " + whereSQL, binds) { s in
+        try query(select + " " + whereSQL, binds) { s in
+            let hasLat = sqlite3_column_type(s, 9) != SQLITE_NULL && sqlite3_column_type(s, 10) != SQLITE_NULL
             out.append(WAMessage(
                 pk: sqlite3_column_int64(s, 0), chatPK: sqlite3_column_int64(s, 1),
                 fromMe: sqlite3_column_int64(s, 2) != 0, type: Int(sqlite3_column_int64(s, 3)),
                 date: Date(timeIntervalSinceReferenceDate: sqlite3_column_double(s, 4)),
                 text: ChatDB.str(s, 5), mediaPath: ChatDB.str(s, 6),
-                jid: ChatDB.str(s, 7) ?? "", partner: ChatDB.str(s, 8)))
+                jid: ChatDB.str(s, 7) ?? "", partner: ChatDB.str(s, 8),
+                latitude: hasLat ? sqlite3_column_double(s, 9) : nil,
+                longitude: hasLat ? sqlite3_column_double(s, 10) : nil))
         }
         return out
     }
@@ -216,7 +240,7 @@ func uploadChat(_ msgs: [WAMessage], context: [WAMessage], settings: Settings) a
     var attachments: [(name: String, data: Data)] = []
     func entry(_ m: WAMessage, withFile: Bool) -> [String: Any] {
         var e: [String: Any] = ["id": m.pk, "at": iso.string(from: m.date), "from_me": m.fromMe,
-                                "kind": m.kind ?? "text", "text": m.text ?? ""]
+                                "kind": m.kind ?? "text", "text": m.bodyText]
         if withFile, m.isMedia, let f = m.mediaFile,
            let size = (try? f.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size <= maxAttachmentBytes,
            let data = try? Data(contentsOf: f) {
