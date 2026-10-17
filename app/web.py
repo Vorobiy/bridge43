@@ -49,13 +49,15 @@ def _meta(item: dict) -> dict:
 @router.get("/", response_class=HTMLResponse)
 def inbox(request: Request, status: str | None = None, q: str = ""):
     threads = db.list_threads(status)
+    if not status:
+        threads = [t for t in threads if t["status"] != "not_relevant"]
     if q.strip():
         needle = q.strip().lower()
         threads = [t for t in threads if needle in " ".join(
             str(t.get(k) or "") for k in ("case_number", "display_name", "address", "title")).lower()]
     everything = db.list_threads()
     counts = {s: sum(1 for t in everything if t["status"] == s)
-              for s in ("open", "draft_ready", "approved", "closed", "rejected")}
+              for s in ("open", "draft_ready", "approved", "closed", "rejected", "not_relevant")}
     return templates.TemplateResponse(request, "inbox.html", _ctx(request, threads=threads, status=status, counts=counts, q=q))
 
 
@@ -245,6 +247,18 @@ async def send_confirmation(summary_id: int, text: str = Form(...), who: str = D
 
 
 # ------------------------------------------------------------------ organising cases
+
+@router.post("/threads/{thread_id}/relevance")
+def set_relevance(thread_id: int, relevant: str = Form(...)):
+    t = db.get_thread(thread_id) or _404()
+    if relevant == "yes":
+        s = db.latest_summary(thread_id)
+        status = "approved" if s and s["status"] == "approved" else ("draft_ready" if s else "open")
+        db.set_thread(thread_id, status=status, relevance_locked=1)
+        return _back(thread_id, msg=f"{t['case_number']} is a case again and stays in the inbox.")
+    db.set_thread(thread_id, status="not_relevant", relevance_locked=1)
+    return _back(thread_id, msg=f"{t['case_number']} moved to Not relevant.")
+
 
 @router.post("/threads/{thread_id}/close")
 def close_case(thread_id: int):

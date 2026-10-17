@@ -32,10 +32,17 @@ CASE_TOOL = {
     "input_schema": {
         "type": "object",
         "additionalProperties": False,
-        "required": ["what_changed", "case_type", "title", "organization", "situation", "needs", "offers", "assets",
+        "required": ["relevance", "relevance_reason", "what_changed", "case_type", "title", "organization", "situation", "needs", "offers", "assets",
                      "readiness", "numbers", "people", "plan", "open_questions", "safety_flags",
                      "language", "confidence", "confirmation_message"],
         "properties": {
+            "relevance": {"type": "string", "enum": ["relevant", "not_relevant", "unclear"],
+                          "description": "relevant = about schools/education in Cameroon needing building, repair, equipment, "
+                                         "supplies, staff or support, OR logistics for such work (transport, delivery, contractors, "
+                                         "suppliers, partners, donors, volunteers, permits). not_relevant = personal chat, spam, "
+                                         "sales, or anything unrelated to PS43's school work. unclear = too little to tell yet "
+                                         "(e.g. only 'hello')."},
+            "relevance_reason": {"type": "string", "description": "One short sentence explaining the relevance decision."},
             "what_changed": {"type": "string",
                              "description": "If a current case record was given: 1-3 short sentences on what the NEW items added or changed "
                                             "(cite them like [I12]), or 'No change' if they add nothing. If there is no current record: 'New case'."},
@@ -130,6 +137,9 @@ CASE_TOOL = {
 
 SYSTEM = f"""You are the case scribe for PS43 Foundation, a nonprofit that builds and equips schools in Cameroon.
 PS43 staff talk with schools, communities and partners over WhatsApp, SMS, phone calls and field forms.
+Many people contact the same WhatsApp number, so first decide whether this conversation is PS43 work at all
+(relevance): schools or education in Cameroon that need rebuilding, repairs, equipment, supplies or support, or
+logistical help for that work. Personal or unrelated conversations are not_relevant.
 Your job is the scribe's job in a clinic: turn the conversation into an accurate, structured case draft
 that a staff member will review and approve. You never talk to the school yourself.
 
@@ -266,11 +276,16 @@ def summarize_thread(thread_id: int, manual: bool = False) -> dict | None:
     org = data.get("organization") or {}
     if org.get("name") and not contact.get("display_name"):
         db.update_contact(contact["id"], display_name=org["name"])
+    # Only school / logistics conversations become visible cases; the rest are set aside (staff can restore them)
+    if data.get("relevance") == "not_relevant" and not thread.get("relevance_locked"):
+        db.set_thread(thread_id, status="not_relevant")
     return summary
 
 
 def normalize(data: dict) -> dict:
     """Fill any missing keys so templates and later steps can rely on the shape."""
+    data.setdefault("relevance", "unclear")
+    data.setdefault("relevance_reason", "")
     data.setdefault("what_changed", "")
     data.setdefault("case_type", "unclear")
     data.setdefault("title", "Untitled case")

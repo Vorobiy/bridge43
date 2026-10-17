@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS contacts (
 CREATE TABLE IF NOT EXISTS threads (
     id INTEGER PRIMARY KEY,
     contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-    status TEXT NOT NULL DEFAULT 'open',   -- open | draft_ready | approved (all still collecting) | closed | rejected
+    status TEXT NOT NULL DEFAULT 'open',   -- open | draft_ready | approved | not_relevant (all still collecting) | closed | rejected
+    relevance_locked INTEGER NOT NULL DEFAULT 0, -- 1 = staff decided relevance; the AI no longer changes it
     case_number TEXT UNIQUE,               -- PS43-2026-0001, given when the case is opened
     title TEXT,
     opened_at TEXT NOT NULL,
@@ -127,6 +128,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "case_number" not in _columns(conn, "threads"):
         conn.execute("ALTER TABLE threads ADD COLUMN case_number TEXT")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_threads_case ON threads(case_number)")
+    if "relevance_locked" not in _columns(conn, "threads"):
+        conn.execute("ALTER TABLE threads ADD COLUMN relevance_locked INTEGER NOT NULL DEFAULT 0")
     if "reply_to" not in _columns(conn, "contacts"):
         conn.execute("ALTER TABLE contacts ADD COLUMN reply_to TEXT")
     # 1. one contact per phone number: whatsapp:+237..., +237... and tel:+237... are the same person
@@ -302,7 +305,7 @@ def delete_contact_data(contact_id: int) -> list[str]:
 
 # ---------------------------------------------------------------- threads
 
-ACTIVE_STATUSES = ("open", "draft_ready", "approved")
+ACTIVE_STATUSES = ("open", "draft_ready", "approved", "not_relevant")
 
 
 def open_thread_for(contact_id: int, at: str | None = None) -> dict[str, Any]:
@@ -315,7 +318,7 @@ def open_thread_for(contact_id: int, at: str | None = None) -> dict[str, Any]:
     at = at or now()
     with tx() as conn:
         t = conn.execute(
-            "SELECT * FROM threads WHERE contact_id = ? AND status IN ('open', 'draft_ready', 'approved') "
+            "SELECT * FROM threads WHERE contact_id = ? AND status IN ('open', 'draft_ready', 'approved', 'not_relevant') "
             "ORDER BY id DESC LIMIT 1",
             (contact_id,),
         ).fetchone()

@@ -38,6 +38,23 @@ def split_contact(contact: str) -> tuple[str | None, str | None]:
     return name, phone
 
 
+@router.get("/recent")
+def recent_cases(limit: int = 8, authorization: str | None = Header(default=None)) -> list[dict]:
+    """Latest cases for the Mac menu bar app (not-relevant conversations left out)."""
+    _check(authorization)
+    from . import db
+    out = []
+    for t in db.list_threads():
+        if t["status"] == "not_relevant":
+            continue
+        out.append({"case_number": t["case_number"], "name": t["display_name"] or t["address"],
+                    "status": t["status"], "title": t["title"], "item_count": t["item_count"],
+                    "last_item_at": t["last_item_at"], "url": f"{settings.public_base_url}/threads/{t['id']}"})
+        if len(out) >= max(1, min(limit, 50)):
+            break
+    return out
+
+
 @router.get("/ping")
 def ping(authorization: str | None = Header(default=None)) -> dict:
     _check(authorization)

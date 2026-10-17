@@ -1,5 +1,14 @@
 # Bridge43 call recorder (Mac)
 
+**Menu bar app (recommended):** `./build_app.sh` builds *Bridge43 Recorder.app*, installs it in
+`~/Applications` and starts it. A phone icon appears at the top right of the screen: it turns into a red
+dot with a timer while a WhatsApp call is recorded, then files the call into Bridge43 (your Railway server).
+Its menu shows the last filed call, the latest cases (click to open), *Open Bridge43 inbox*, *Pause*,
+*Start at login* (switched on automatically), *Server address…* and *Check setup…*. It reads the server address
+and token from `~/.bridge43/recorder.json`. Messages, photos and voice notes don't need the Mac at all: they
+reach Railway through Twilio. The terminal version below still works (`--cli`, `--check`, `--debug`).
+
+
 Automatic note-taking for WhatsApp calls on a PS43 laptop, like Otter for Google Meet, but nothing
 joins the call. When WhatsApp Desktop starts using the microphone, the recorder records both sides
 on this Mac. When the call ends, it checks your rules, asks you who it was, and files the recording in

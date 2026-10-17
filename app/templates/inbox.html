@@ -16,7 +16,8 @@
   <a href="/?status=open">Collecting ({{ counts.open }})</a> ·
   <a href="/?status=approved">Approved ({{ counts.approved }})</a> ·
   <a href="/?status=closed">Closed ({{ counts.closed }})</a> ·
-  <a href="/?status=rejected">Rejected ({{ counts.rejected }})</a>
+  <a href="/?status=rejected">Rejected ({{ counts.rejected }})</a> ·
+  <a href="/?status=not_relevant">Not relevant ({{ counts.not_relevant }})</a>
 </p>
 <div class="panel" style="padding:0; overflow-x:auto">
 {% if threads %}
@@ -29,7 +30,7 @@
     <td><strong>{{ t.display_name or t.address }}</strong><br>
         <span class="muted small">{{ t.address }}{% if t.consent_status == 'opted_out' %} · opted out{% endif %}</span></td>
     <td>{{ t.title or "—" }}{% if t.stale_summary %}<br><span class="badge b-held">new messages since draft</span>{% endif %}</td>
-    <td><span class="badge b-{{ t.status }}">{{ {"open":"collecting","draft_ready":"needs review","approved":"approved","closed":"closed","rejected":"rejected"}[t.status] }}</span></td>
+    <td><span class="badge b-{{ t.status }}">{{ {"open":"collecting","draft_ready":"needs review","approved":"approved","closed":"closed","rejected":"rejected","not_relevant":"not relevant"}[t.status] }}</span></td>
     <td>{{ t.item_count }} item{{ "" if t.item_count == 1 else "s" }}
         {% if t.kinds %}<br><span class="small muted">{{ t.kinds.replace("audio", "voice/calls").replace(",", " · ") }}</span>{% endif %}
         {% if t.pending_count %} <span class="muted small">({{ t.pending_count }} processing)</span>{% endif %}

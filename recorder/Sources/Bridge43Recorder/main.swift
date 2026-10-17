@@ -39,11 +39,23 @@ let callsDir = appDir.appendingPathComponent("calls", isDirectory: true)
 let args = Set(CommandLine.arguments.dropFirst())
 let debug = args.contains("--debug")
 
+/// Hook for the menu bar app: called with every log line.
+var logListener: ((String) -> Void)?
+
 func log(_ message: String) {
     let f = DateFormatter()
     f.dateFormat = "HH:mm:ss"
     print("[\(f.string(from: Date()))] \(message)")
     fflush(stdout)
+    if let listener = logListener {
+        DispatchQueue.main.async { listener(message) }
+    }
+}
+
+func saveSettings(_ s: Settings) {
+    let enc = JSONEncoder()
+    enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+    try? enc.encode(s).write(to: settingsURL)
 }
 
 func loadSettings() -> Settings {
@@ -54,12 +66,13 @@ func loadSettings() -> Settings {
             exit(1)
         }
     }
-    let enc = JSONEncoder()
-    enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-    try? enc.encode(Settings()).write(to: settingsURL)
-    log("Created \(settingsURL.path). Put your RECORDER_TOKEN in \"token\", then run again.")
-    exit(0)
+    saveSettings(Settings())
+    log("Created \(settingsURL.path).")
+    return Settings()
 }
+
+/// Current settings (the menu bar app edits these and saves them).
+var settings = loadSettings()
 
 // MARK: - Which apps are using the microphone (Core Audio process objects, macOS 14.4+)
 
@@ -395,7 +408,7 @@ func mix(_ rec: CallRecording, ffmpeg: String) -> URL? {
     return out
 }
 
-func upload(_ file: URL, contact: String, startedAt: Date, duration: Double, settings: Settings) async throws -> String {
+func upload(_ file: URL, contact: String, startedAt: Date, duration: Double, settings: Settings) async throws -> (url: String, caseNumber: String?) {
     guard let url = URL(string: settings.serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/recorder/calls") else {
         throw RecorderError("bad serverURL in settings")
     }
@@ -426,17 +439,25 @@ func upload(_ file: URL, contact: String, startedAt: Date, duration: Double, set
     let text = String(data: data, encoding: .utf8) ?? ""
     guard code == 200 else { throw RecorderError("server answered \(code): \(text.prefix(300))") }
     if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let link = json["url"] as? String {
-        return link
+        return (link, json["case_number"] as? String)
     }
-    return settings.serverURL
+    return (settings.serverURL, nil)
 }
 
-func finish(_ rec: CallRecording, settings: Settings) async {
+enum CallOutcome {
+    case filed(who: String, caseNumber: String?, url: String)
+    case discarded(String)
+    case failed(String)
+}
+
+@discardableResult
+func finish(_ rec: CallRecording, settings: Settings) async -> CallOutcome {
     let duration = Date().timeIntervalSince(rec.startedAt)
     let contact = rec.likelyContact
-    func discard(_ why: String) {
+    func discard(_ why: String) -> CallOutcome {
         log("Discarded: \(why)")
         try? FileManager.default.removeItem(at: rec.folder)
+        return .discarded(why)
     }
     log("Checking rules…")
     if duration < settings.minCallSeconds {
@@ -472,21 +493,50 @@ func finish(_ rec: CallRecording, settings: Settings) async {
     } else {
         log("No audio was captured. Nothing to send.")
         try? fm.removeItem(at: rec.folder)
-        return
+        return .discarded("no audio captured")
     }
     if !fm.fileExists(atPath: rec.meURL.path) {
-        log("⚠️  Only the caller's voice was recorded. Turn on Terminal in System Settings → Privacy & Security → Microphone, then restart the recorder.")
+        log("⚠️  Only the caller's voice was recorded. Allow the microphone for Bridge43 (or Terminal) in System Settings → Privacy & Security → Microphone, then restart it.")
     }
     log("Uploading to \(settings.serverURL)…")
     do {
-        let link = try await upload(toSend, contact: who, startedAt: rec.startedAt, duration: duration, settings: settings)
-        log("Filed in Bridge43 under \"\(who)\": \(link)")
-        notify("Call filed in Bridge43", "\(who) · \(Int(duration / 60)) min. The case draft follows shortly.")
+        let result = try await upload(toSend, contact: who, startedAt: rec.startedAt, duration: duration, settings: settings)
+        log("Filed in Bridge43 under \"\(who)\"\(result.caseNumber.map { " (\($0))" } ?? ""): \(result.url)")
+        notify("Call filed in Bridge43", "\(who)\(result.caseNumber.map { " · \($0)" } ?? "") · \(max(1, Int(duration / 60))) min. The case updates shortly.")
         try? FileManager.default.removeItem(at: rec.folder)   // don't keep audio on the laptop once it's filed
+        return .filed(who: who, caseNumber: result.caseNumber, url: result.url)
     } catch {
         log("Upload failed: \(error). The recording is kept in \(rec.folder.path)")
-        notify("Bridge43: upload failed", "The recording is saved on this Mac. Check that Bridge43 is running.")
+        notify("Bridge43: upload failed", "The recording is saved on this Mac and can be retried from the menu.")
+        return .failed("\(error)")
     }
+}
+
+/// Re-send recordings whose upload failed earlier (kept in ~/.bridge43/calls).
+func retryPending(settings: Settings) async -> Int {
+    let fm = FileManager.default
+    guard let dirs = try? fm.contentsOfDirectory(at: callsDir, includingPropertiesForKeys: nil) else { return 0 }
+    var sent = 0
+    for dir in dirs where dir.lastPathComponent.hasPrefix("call_") {
+        let candidates = ["call.m4a", "other.caf"].map { dir.appendingPathComponent($0) }
+        guard let file = candidates.first(where: { fm.fileExists(atPath: $0.path) }) else { continue }
+        let stamp = String(dir.lastPathComponent.dropFirst(5))
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        let started = f.date(from: stamp) ?? Date()
+        do {
+            _ = try await upload(file, contact: "Unknown caller", startedAt: started, duration: 0, settings: settings)
+            try? fm.removeItem(at: dir)
+            sent += 1
+        } catch {
+            log("Retry failed for \(dir.lastPathComponent): \(error)")
+        }
+    }
+    return sent
+}
+
+func pendingRecordings() -> Int {
+    let dirs = (try? FileManager.default.contentsOfDirectory(at: callsDir, includingPropertiesForKeys: nil)) ?? []
+    return dirs.filter { $0.lastPathComponent.hasPrefix("call_") }.count
 }
 
 // MARK: - Check mode
@@ -507,7 +557,7 @@ func check(_ settings: Settings) async {
         log("✅ Screen & audio recording permission OK")
         log(wa.isEmpty ? "⚠️  WhatsApp is not running right now" : "✅ WhatsApp found: \(wa.map(\.bundleIdentifier).joined(separator: ", "))")
     } catch {
-        log("❌ No recording permission: System Settings → Privacy & Security → Screen & System Audio Recording → turn on your Terminal app, then quit and reopen Terminal.")
+        log("❌ No recording permission: System Settings → Privacy & Security → Screen & System Audio Recording → allow Bridge43 Recorder (or Terminal), then reopen it.")
     }
     log("Apps using the microphone right now: \(MicWatcher.appsUsingMic())")
     if let url = URL(string: settings.serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/recorder/ping") {
@@ -528,10 +578,22 @@ func check(_ settings: Settings) async {
 
 // MARK: - Main loop
 
+/// What the watcher is doing, for the menu bar icon.
+enum WatchState {
+    case watching, paused, recording(since: Date, who: String?), finishing
+}
+
+/// Hooks used by the menu bar app (all called on the main actor).
+var isPaused: () -> Bool = { false }
+var currentSettings: () -> Settings = { settings }
+var stateListener: ((WatchState) -> Void)?
+var outcomeListener: ((CallOutcome) -> Void)?
+
 @MainActor
-func watch(_ settings: Settings) async {
-    log("Watching for WhatsApp calls. Keep this window open. Press Ctrl+C to stop.")
-    if !settings.onlyContacts.isEmpty { log("Only keeping calls with: \(settings.onlyContacts.joined(separator: ", "))") }
+func watch() async {
+    log("Watching for WhatsApp calls.")
+    if !currentSettings().onlyContacts.isEmpty { log("Only keeping calls with: \(currentSettings().onlyContacts.joined(separator: ", "))") }
+    stateListener?(.watching)
     var current: CallRecording?
     var activeTicks = 0, idleTicks = 0, tick = 0
     var lastDebug: [String] = []
@@ -546,12 +608,17 @@ func watch(_ settings: Settings) async {
         activeTicks = inCall ? activeTicks + 1 : 0
         idleTicks = inCall ? 0 : idleTicks + 1
 
+        if current == nil, isPaused() {
+            activeTicks = 0
+            continue
+        }
         if current == nil, activeTicks >= 2 {
             let rec = CallRecording()
             do {
                 try await rec.start()
                 current = rec
                 log("📞 WhatsApp call started: recording")
+                stateListener?(.recording(since: rec.startedAt, who: rec.likelyContact))
                 notify("Bridge43 is recording this call", "Tell the caller: this call is recorded to help their school.")
             } catch {
                 log("Could not start recording: \(error)")
@@ -559,7 +626,10 @@ func watch(_ settings: Settings) async {
                 activeTicks = -30   // wait ~30 s before trying again
             }
         } else if let rec = current {
-            if tick % 5 == 0 { await rec.refreshTitles() }
+            if tick % 5 == 0 {
+                await rec.refreshTitles()
+                stateListener?(.recording(since: rec.startedAt, who: rec.likelyContact))
+            }
             let audioStopped = Date().timeIntervalSince(rec.lastOtherAudioAt) > 6
             if idleTicks >= 3 || (audioStopped && rec.otherStart != nil) {
                 if audioStopped && idleTicks < 3 { log("WhatsApp call audio stopped: treating the call as ended") }
@@ -568,22 +638,30 @@ func watch(_ settings: Settings) async {
                 log(String(format: "Call ended after %.0f s (caller spoke ~%.0f s, your mic %@)",
                            Date().timeIntervalSince(rec.startedAt), rec.otherSpeechSeconds,
                            FileManager.default.fileExists(atPath: rec.meURL.path) ? "recorded" : "NOT recorded"))
-                await finish(rec, settings: settings)
+                stateListener?(.finishing)
+                let outcome = await finish(rec, settings: currentSettings())
+                outcomeListener?(outcome)
+                stateListener?(isPaused() ? .paused : .watching)
             }
         }
     }
 }
 
-let settings = loadSettings()
-if settings.token.isEmpty {
-    log("Add your token to \(settingsURL.path) (\"token\": the RECORDER_TOKEN from Bridge43's .env).")
-    exit(1)
-}
-Task { @MainActor in
-    if args.contains("--check") {
-        await check(settings)
-        exit(0)
+if args.contains("--check") || args.contains("--cli") || args.contains("--debug") {
+    // Terminal mode
+    if settings.token.isEmpty {
+        log("Add your token to \(settingsURL.path) (\"token\": the RECORDER_TOKEN from Bridge43's .env).")
+        exit(1)
     }
-    await watch(settings)
+    Task { @MainActor in
+        if args.contains("--check") {
+            await check(settings)
+            exit(0)
+        }
+        await watch()
+    }
+    RunLoop.main.run()
+} else {
+    // Menu bar app (default)
+    MainActor.assumeIsolated { MenuBarApp.run() }
 }
-RunLoop.main.run()

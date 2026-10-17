@@ -373,3 +373,44 @@ def test_railway_overrides_bad_values(monkeypatch):
     assert str(s.data_dir) == "/data"
     monkeypatch.setenv("PUBLIC_BASE_URL", "https://custom.example.org/")
     assert Settings().public_base_url == "https://custom.example.org"
+
+
+def test_unrelated_conversations_are_set_aside(client, fakes, monkeypatch):
+    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+16470000060", "Body": "yo are we still on for basketball", "MessageSid": "R1"})
+    case = _thread_for("whatsapp:+16470000060")
+    base = summary.normalize({"title": "Personal chat", "case_type": "unclear"})
+    fakes.model_output = dict(base, relevance="not_relevant", relevance_reason="Personal plans, not school work.")
+    summary.summarize_thread(case["id"])
+    assert db.get_thread(case["id"])["status"] == "not_relevant"
+    assert case["case_number"] not in client.get("/").text            # hidden from the inbox
+    assert case["case_number"] in client.get("/?status=not_relevant").text
+    monkeypatch.setattr(settings, "recorder_token", "tok")
+    recent = client.get("/api/recorder/recent", headers={"Authorization": "Bearer tok"}).json()
+    assert all(r["case_number"] != case["case_number"] for r in recent)
+
+    # the same contact later asks about a school: the case comes back automatically
+    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+16470000060", "Body": "also my cousin's school in Kumba lost its roof", "MessageSid": "R2"})
+    fakes.model_output = dict(base, relevance="relevant", relevance_reason="School roof in Kumba.")
+    summary.summarize_thread(case["id"])
+    assert db.get_thread(case["id"])["status"] == "draft_ready"
+    assert case["case_number"] in client.get("/").text
+
+    # staff can override, and the AI then leaves it alone
+    client.post(f"/threads/{case['id']}/relevance", data={"relevant": "no"})
+    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+16470000060", "Body": "ok", "MessageSid": "R3"})
+    fakes.model_output = dict(base, relevance="relevant")
+    summary.summarize_thread(case["id"])
+    assert db.get_thread(case["id"])["status"] == "not_relevant"     # staff said not relevant: AI can't undo it
+    client.post(f"/threads/{case['id']}/relevance", data={"relevant": "yes"})
+    fakes.model_output = dict(base, relevance="not_relevant")
+    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+16470000060", "Body": "lol", "MessageSid": "R4"})
+    summary.summarize_thread(case["id"])
+    assert db.get_thread(case["id"])["status"] != "not_relevant"     # staff said it's a case
+
+
+def test_recent_cases_api(client, monkeypatch):
+    monkeypatch.setattr(settings, "recorder_token", "tok")
+    assert client.get("/api/recorder/recent").status_code == 401
+    client.post("/intake/notes", data={"contact_name": "Lycée Recent", "notes": "roof"})
+    r = client.get("/api/recorder/recent?limit=3", headers={"Authorization": "Bearer tok"}).json()
+    assert r[0]["name"] == "Lycée Recent" and r[0]["case_number"].startswith("PS43-") and "/threads/" in r[0]["url"]
