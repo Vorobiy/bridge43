@@ -74,6 +74,57 @@ contact and at the start of every call; `STOP`/`ARRET` deletes all of a contact'
 explicit opt-in mode; Twilio signature checks on webhooks; staff login on every screen; the AI is told to
 use only what the sources say and to treat their content as data, not instructions.
 
+## Part two: from approved case to delivered help
+
+After staff approve a case, Bridge43 carries it through to delivery and follow-up, on the staff screens
+**Priorities**, **Tickets**, **Partners** and **Matching**.
+
+**Priority matrix** (`/dashboard`): every approved school gets a **need** score (missing items in the 8 profile
+areas, weighted, plus how many pupils) and a **readiness** score (power, signal, secure storage, someone to
+maintain it, truck access, parents' association). Schools land in *Act now*, *Prepare first*, *Quick wins* or
+*Monitor*; closed or unsafe schools go on *Safety hold*. Needs already delivered drop out of the score, so a school
+moves down the matrix once helped. Filter by region. JSON: `GET /api/matrix`.
+
+**Tickets** (`/tickets`): approving a school creates one ticket per need, with deployment steps for that kind of
+help (survey, 2 quotes, build or deliver, train, school confirms with photos). Status moves New → Partner found →
+In progress → Delivered → Confirmed by school. Every message to a partner or school, note and status change is
+logged on the ticket (communication tracking). Messages go out on WhatsApp/SMS through Twilio, or staff tick
+"I sent it from my phone" to just log it.
+
+**Partners and donors** (`/partners`): PS43 has no fixed partner list, so the database builds itself. A donor or
+partner who calls or writes is screened and summarised like a school (case type *offer*): who they are, what and
+how much they can give, where, when, conditions, whether the items are abroad, and what they say about past work
+with PS43. Approving the case adds or updates the partner with its items. Roles: donor, does the work (local
+contractor or NGO), supplier, shipping. Staff can also add a partner they already know. Partners get their own
+follow-up questions (what and how many, regions, timing, registration, contact).
+
+**Trust** (0-100: New, Verified, Trusted) is earned from what PS43 has seen, not what partners claim: identity
+checked by staff (+30), registered organisation (+5), photos or documents (+10), each case the **school confirmed**
+(+15, up to 45), deliveries waiting for confirmation (+5), commitments not kept (-15).
+
+**Matching** (`/matches`, and on each ticket): for every open need and every partner item, what they have in
+common: same type of help (or related help, or money), the partner serves the school's region (a partner that says
+"Northwest only" is never suggested for the Far North), quantity still needed vs. still available, and trust. When
+one partner is not enough, up to 3 are combined (e.g. 25 laptops from Toronto + 15 from Yaoundé for a 40-laptop
+lab), each asked only for what is still missing. Items abroad add shipping steps (ship, customs, transport) and
+suggest a shipping partner. The by-type table shows where demand has no supply: where to look for new partners.
+
+**Quote check**: each quote (total FCFA, quantity, unit) is compared with other quotes for the same kind of item on
+any ticket. More than 25% above the usual unit price is flagged "ask why before accepting"; far below is flagged
+"check quality".
+
+**Follow-ups**: when a ticket is delivered, the school gets a short WhatsApp check at 30, 90 and 180 days (French or
+English). Due follow-ups appear on Priorities; staff check and send. Answers land in the school's case.
+
+**Public sign-up** (`/join`, no login, French and English): *Request help* for schools and educators, and *Offer
+help* for donors, contractors, suppliers and shippers. Each form becomes an intake item in the inbox, exactly like a
+WhatsApp message (AI draft, staff review), with a consent checkbox and a hidden anti-bot field. Share the link in
+PS43's outreach.
+
+**Demo data**: `python -m scripts.seed_demo` loads fictional schools and partners for the whole flow (a computer lab
+covered by two laptop donors and a shipper, an inflated roofing quote, a trusted borehole contractor with two
+confirmed cases, a follow-up due, a school on safety hold). `--intake-only` loads only the two intake examples.
+
 ## Run it
 
 Needs Python 3.11+ and FFmpeg (`brew install ffmpeg` / `apt install ffmpeg`).
@@ -135,7 +186,12 @@ app/
   processing/ffmpeg.py          audio/video helpers
   recorder_api.py       upload endpoint for the Mac call recorder
   summary.py            SNAP schema + school profile, prompt, citation checks
-  gaps.py               the 14 follow-up questions and which are still unanswered
+  gaps.py               follow-up questions (14 for schools, 7 for donors) and which are still unanswered
+  scoring.py            need and readiness scores, priority matrix boxes
+  matching.py           regions, quantities, partner trust, need-to-partner matching, quote price check
+  workflow.py           approval hook, tickets and steps, partners database, messages, follow-ups
+  ops_web.py            Priorities, Tickets, Partners, Matching screens and their JSON APIs
+  public_web.py         public /join sign-up forms (French/English)
   evidence.py           trust level and map location, worked out from the items
   web.py + templates/   inbox, intake forms, review screen, JSON API
 recorder/               Mac call recorder (Swift) - see recorder/README.md

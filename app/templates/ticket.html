@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}{{ t.description }}{% endblock %}
+{% block body %}
+<p class="small"><a href="/tickets">← Tickets</a> · <a href="/dashboard">Priorities</a></p>
+{% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
+{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+
+<div class="panel">
+  <div class="row" style="align-items:flex-start">
+    <div style="flex:3">
+      <span class="badge b-{{ t.status }}">{{ status_labels[t.status] }}</span>
+      {% if t.urgency != "unknown" %}<span class="badge b-{{ t.urgency }}">{{ t.urgency }} urgency</span>{% endif %}
+      <span class="pill">{{ category_labels.get(t.category, t.category) }}</span>
+      <h1 style="margin:8px 0 4px">{{ t.description }}{% if t.quantity_text %} <span class="muted">· {{ t.quantity_text }}</span>{% endif %}</h1>
+      <p class="muted" style="margin:0">For <a href="/threads/{{ t.thread_id }}">{{ score.name if score else (t.display_name or t.case_title) }}</a>
+        {% if score %}· {{ [score.town, score.region]|select|join(", ") }}{% if score.students %} · {{ score.students }} pupils{% endif %}
+        · <span class="badge q-{{ score.quadrant }}" style="background:var(--q); color:#fff">{{ score.quadrant_label }}</span>{% endif %}
+        · {{ t.case_number }}</p>
+    </div>
+    <form method="post" action="/tickets/{{ t.id }}/status" class="row" style="flex:0 0 260px; align-items:flex-end">
+      <div><label for="st">Status</label><select id="st" name="status">{% for s in statuses %}<option value="{{ s }}" {% if s == t.status %}selected{% endif %}>{{ status_labels[s] }}</option>{% endfor %}</select></div>
+      <div style="flex:0 0 auto"><button type="submit">Set</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="grid2" style="margin-top:16px">
+<div>
+  <!-- partners on this need -->
+  <div class="panel">
+    <h2 style="margin-top:0">Partners</h2>
+    {% if linked %}
+    <table><thead><tr><th>Partner</th><th>Gives</th><th>Status</th><th></th></tr></thead><tbody>
+    {% for l in linked %}<tr><td><a href="/partners/{{ l.donor_id }}">{{ l.donor_name }}</a></td>
+      <td class="small">{% if l.quantity %}{{ (l.quantity)|qty }} × {% endif %}{{ l.item_description or "help" }}</td>
+      <td><span class="badge">{{ l.status }}</span></td>
+      <td>{% if l.status == "committed" %}<form class="inline" method="post" action="/tickets/{{ t.id }}/links/{{ l.id }}/cancel" onsubmit="return confirm('Cancel this commitment? It lowers the partner\'s trust.')"><button class="danger" type="submit">Cancel</button></form>{% endif %}</td></tr>
+    {% endfor %}</tbody></table>
+    {% else %}<p class="muted small">No partner yet.</p>{% endif %}
+
+    {% set p = m.plan %}
+    {% if t.status in ("new", "matched") %}
+    <h3>Suggested: <span class="badge b-{{ p.type }}">{{ plan_labels[p.type] }}</span></h3>
+    {% if p.need_left %}<p class="small muted">Still needed: {{ (p.need_left)|qty }} {{ t.unit or "" }}{% if m.region %} in {{ m.region }}{% endif %}.</p>{% endif %}
+    {% if p.picks %}
+      <ul>{% for c in p.picks %}<li><strong>{{ c.donor_name }}</strong>: {{ c.item }}{% if c.covers %} — {{ (c.covers)|qty }}{% endif %}
+        <span class="badge b-{{ c.trust.level }}">{{ c.trust.level }} {{ c.trust.score }}</span>{% if c.abroad %} <span class="badge b-partial">abroad</span>{% endif %}</li>{% endfor %}</ul>
+      <form method="post" action="/tickets/{{ t.id }}/assign-plan"><button class="primary" type="submit">Use this plan</button></form>
+    {% endif %}
+    {% if p.needs_shipping %}
+      <div class="flash warn" style="margin-top:10px"><strong>Needs shipping into Cameroon.</strong>
+        {% if p.shippers %}Shipping partners: {% for s in p.shippers %}<a href="/partners/{{ s.donor_id }}">{{ s.donor_name }}</a> ({{ s.trust.level }}){% if not loop.last %}, {% endif %}{% endfor %}.
+        {% else %}No shipping partner in the database yet: add one on the Partners page.{% endif %}</div>
+    {% endif %}
+    {% endif %}
+  </div>
+
+  {% if m.candidates and t.status in ("new", "matched", "in_progress") %}
+  <div class="panel" style="margin-top:16px; overflow-x:auto">
+    <h2 style="margin-top:0">All possible partners ({{ m.candidates|length }})</h2>
+    <p class="small muted">What each partner has in common with this need: type of help, place, quantity and trust.</p>
+    <table><thead><tr><th>Partner and item</th><th>Match</th><th>Why</th><th></th></tr></thead><tbody>
+    {% for c in m.candidates %}
+    <tr><td><a href="/partners/{{ c.donor_id }}"><strong>{{ c.donor_name }}</strong></a><br><span class="small">{{ c.item }}{% if c.available %} · {{ (c.available)|qty }} {{ c.unit or "" }} left{% endif %}</span>
+        {% if c.conditions %}<br><span class="small muted">Conditions: {{ c.conditions }}</span>{% endif %}</td>
+      <td><strong>{{ c.score }}</strong><br><span class="badge b-{{ c.trust.level }}">{{ c.trust.level }}</span></td>
+      <td class="small">{{ c.reasons|join(" · ") }}</td>
+      <td><form method="post" action="/tickets/{{ t.id }}/assign" class="inline">
+        <input type="hidden" name="donor_id" value="{{ c.donor_id }}"><input type="hidden" name="item_id" value="{{ c.item_id }}">
+        <input type="text" name="quantity" value="{{ (c.covers)|qty if c.covers else '' }}" placeholder="qty" style="width:70px">
+        <button type="submit">Add</button></form></td></tr>
+    {% endfor %}</tbody></table>
+  </div>
+  {% endif %}
+
+  <!-- quotes -->
+  <div class="panel" style="margin-top:16px; overflow-x:auto">
+    <h2 style="margin-top:0">Quotes and price check</h2>
+    <p class="small muted">Every price is compared with other quotes for the same thing (any school). More than 25% above is flagged, so prices are not inflated.</p>
+    {% if quotes %}
+    <table><thead><tr><th>From</th><th>Total (FCFA)</th><th>Per unit</th><th>Check</th><th></th></tr></thead><tbody>
+    {% for q in quotes %}<tr>
+      <td>{{ q.who }}{% if q.chosen %} <span class="badge b-checked">chosen</span>{% endif %}{% if q.note %}<br><span class="small muted">{{ q.note }}</span>{% endif %}</td>
+      <td>{{ "{:,.0f}".format(q.amount) }}{% if q.quantity %}<br><span class="small muted">for {{ (q.quantity)|qty }} {{ q.unit or "" }}</span>{% endif %}</td>
+      <td>{% if q.check.unit_price %}{{ "{:,.0f}".format(q.check.unit_price) }}{% if q.check.median %}<br><span class="small muted">usual {{ "{:,.0f}".format(q.check.median) }}</span>{% endif %}{% else %}—{% endif %}</td>
+      <td><span class="badge b-{{ q.check.status }}" style="white-space:normal">{{ q.check.label }}</span></td>
+      <td>{% if not q.chosen %}<form class="inline" method="post" action="/tickets/{{ t.id }}/quotes/{{ q.id }}/choose"><button type="submit">Choose</button></form>{% endif %}</td>
+    </tr>{% endfor %}</tbody></table>
+    {% endif %}
+    <details {% if not quotes %}open{% endif %}><summary>Add a quote</summary>
+      <form method="post" action="/tickets/{{ t.id }}/quotes">
+        <div class="row">
+          <div><label>From a partner</label><select name="donor_id"><option value="">— not in the database —</option>{% for d in donors %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select></div>
+          <div><label>…or supplier name</label><input type="text" name="supplier_name"></div>
+        </div>
+        <div class="row">
+          <div><label>Total amount (FCFA)</label><input type="text" name="amount" required placeholder="1 200 000"></div>
+          <div><label>Quantity</label><input type="text" name="quantity" value="{{ (t.quantity_total)|qty if t.quantity_total else '' }}"></div>
+          <div><label>Unit</label><input type="text" name="unit" value="{{ t.unit or '' }}"></div>
+        </div>
+        <label>Note</label><input type="text" name="note" placeholder="e.g. includes transport and installation">
+        <p><button type="submit">Save quote</button></p>
+      </form>
+    </details>
+  </div>
+</div>
+
+<div>
+  <!-- steps -->
+  <div class="panel">
+    <h2 style="margin-top:0">Deployment steps</h2>
+    <ol style="padding-left:20px">
+    {% for s in steps %}
+      <li style="margin-bottom:6px">{% if s.done_at %}<s>{{ s.title }}</s> <span class="small muted">done {{ s.done_at[:10] }} by {{ s.done_by }}</span>
+        {% else %}{{ s.title }} <span class="small muted">· {{ s.owner }}{% if s.due %} · due {{ s.due }}{% endif %}</span>
+        <form class="inline" method="post" action="/tickets/{{ t.id }}/steps/{{ s.id }}/done"><button type="submit">Done</button></form>{% endif %}</li>
+    {% endfor %}
+    </ol>
+    <p class="small muted">The ticket becomes Delivered when the work steps are done, and Confirmed when the school confirms. Only a school confirmation raises the partner's trust.</p>
+    <details><summary>Add a step</summary>
+      <form method="post" action="/tickets/{{ t.id }}/steps" class="row" style="align-items:flex-end">
+        <div style="flex:3"><label>Step</label><input type="text" name="title" required></div>
+        <div><label>Who</label><select name="owner"><option>ps43</option><option>partner</option><option>school</option></select></div>
+        <div><label>Due</label><input type="text" name="due" placeholder="2026-11-15"></div>
+        <div style="flex:0 0 auto"><button type="submit">Add</button></div>
+      </form>
+    </details>
+  </div>
+
+  <!-- messages -->
+  <div class="panel" style="margin-top:16px">
+    <h2 style="margin-top:0">Message</h2>
+    <form method="post" action="/tickets/{{ t.id }}/message">
+      <label for="to">To</label>
+      <select id="to" name="to" onchange="var o=this.selectedOptions[0]; if(o.dataset.text) document.getElementById('mt').value=o.dataset.text;">
+        {% for d in donors if d.contact_id %}<option value="{{ d.id }}" data-text="{{ partner_texts[d.id] }}" {% if d.id == partner_default %}selected{% endif %}>Partner: {{ d.name }}</option>{% endfor %}
+        <option value="school" data-text="{{ school_text }}" {% if not partner_default %}selected{% endif %}>School: {{ t.display_name or t.case_title }}</option>
+      </select>
+      <textarea id="mt" name="text" rows="5">{{ partner_text if partner_default else school_text }}</textarea>
+      <label class="check"><input type="checkbox" name="manual" value="1"> I sent it from my phone (just log it)</label>
+      <p><button class="primary" type="submit">Send and log</button></p>
+    </form>
+    <form method="post" action="/tickets/{{ t.id }}/note" class="row" style="align-items:flex-end">
+      <div style="flex:3"><label>Add a note (call, visit, decision)</label><input type="text" name="text"></div>
+      <div style="flex:0 0 auto"><button type="submit">Add note</button></div>
+    </form>
+  </div>
+
+  <!-- activity -->
+  <div class="panel" style="margin-top:16px">
+    <h2 style="margin-top:0">Activity and messages</h2>
+    <ul class="log">
+    {% for e in events|reverse %}<li><span class="when">{{ e.at[:16].replace("T", " ") }} · {{ e.who or "" }} · {{ e.kind }}</span><br>{{ e.text }}</li>
+    {% else %}<li class="muted">Nothing yet.</li>{% endfor %}
+    </ul>
+    {% if followups %}<h3>Follow-ups</h3><ul>{% for f in followups %}<li>{{ f.days }} days: due {{ f.due_on }}{% if f.sent_at %} · sent {{ f.sent_at[:10] }}{% endif %}</li>{% endfor %}</ul>{% endif %}
+  </div>
+</div>
+</div>
+{% endblock %}

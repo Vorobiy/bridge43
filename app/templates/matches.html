@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Matching{% endblock %}
+{% block body %}
+<h1 style="margin-bottom:4px">Matching</h1>
+<p class="muted small" style="margin-top:0">What school needs and partner offers have in common: type of help, region, quantity, and trust.
+  When one partner is not enough, partners are combined.</p>
+
+<div class="kpis">
+  <div><strong style="color:var(--bad)">{{ cov.counts.none }}</strong><span>needs with no partner yet</span></div>
+  <div><strong style="color:var(--warn)">{{ cov.counts.related }}</strong><span>only related help: check</span></div>
+  <div><strong style="color:var(--warn)">{{ cov.counts.partial }}</strong><span>partly covered</span></div>
+  <div><strong>{{ cov.counts.single }}</strong><span>one partner can cover it</span></div>
+  <div><strong>{{ cov.counts.combined }}</strong><span>covered by combining partners</span></div>
+  <div><strong>{{ cov.counts.covered }}</strong><span>fully committed</span></div>
+</div>
+
+<div class="panel" style="overflow-x:auto; margin-bottom:16px">
+  <h2 style="margin-top:0">Needs and offers by type of help</h2>
+  <p class="small muted">Where demand has no supply is where to look for new partners (or point PS43's outreach).</p>
+  <table><thead><tr><th>Type of help</th><th>Open school needs</th><th>Partner offers</th><th>Partners</th><th>Needs matched</th><th>Gap</th></tr></thead><tbody>
+  {% for c in cov.by_category %}<tr>
+    <td><strong>{{ c.label|capitalize }}</strong></td><td>{{ c.needs }}</td><td>{{ c.offers }}</td><td>{{ c.partners }}</td><td>{{ c.matched }}</td>
+    <td>{% if c.needs and not c.offers %}<span class="badge b-cancelled">no supply: find partners</span>
+      {% elif c.needs > c.matched %}<span class="badge b-partial">{{ c.needs - c.matched }} unmatched</span>
+      {% elif c.offers and not c.needs %}<span class="badge b-new">offers waiting</span>
+      {% else %}<span class="badge b-matched">covered</span>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="6" class="muted">No open needs or offers yet.</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+
+<div class="panel" style="overflow-x:auto">
+  <h2 style="margin-top:0">Every open need</h2>
+  <table><thead><tr><th>Need</th><th>School</th><th>Plan</th><th>Suggested partners</th></tr></thead><tbody>
+  {% for r in cov.rows %}<tr class="clickable" onclick="location.href='/tickets/{{ r.ticket.id }}'">
+    <td><a href="/tickets/{{ r.ticket.id }}"><strong>{{ r.ticket.description }}</strong></a>{% if r.ticket.quantity_text %} · {{ r.ticket.quantity_text }}{% endif %}
+      {% if r.ticket.urgency in ("critical", "high") %}<span class="badge b-{{ r.ticket.urgency }}">{{ r.ticket.urgency }}</span>{% endif %}</td>
+    <td class="small">{{ r.ticket.school }}<br><span class="muted">{{ r.region or "region unknown" }}</span></td>
+    <td><span class="badge b-{{ r.plan.type }}">{{ plan_labels[r.plan.type] }}</span>{% if r.plan.needs_shipping %}<br><span class="badge b-partial">needs shipping</span>{% endif %}</td>
+    <td class="small">{% for p in r.plan.picks %}{{ p.donor_name }}{% if p.covers %} ({{ (p.covers)|qty }}){% endif %}{% if not loop.last %} + {% endif %}{% else %}<span class="muted">—</span>{% endfor %}</td>
+  </tr>{% else %}<tr><td colspan="4" class="muted">No open needs.</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+{% endblock %}

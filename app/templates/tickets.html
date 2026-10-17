@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Tickets{% endblock %}
+{% block body %}
+{% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
+<h1 style="margin-bottom:4px">Tickets</h1>
+<p class="muted small" style="margin-top:0">One ticket per school need. It moves right as a partner is found, the work is done and the school confirms it.</p>
+<div class="board">
+{% for status, items in cols.items() %}
+  <div class="col">
+    <h3>{{ status_labels[status] }} <span class="muted">({{ items|length }})</span></h3>
+    {% for k in items %}
+    <div class="card">
+      <a class="title" href="/tickets/{{ k.id }}">{{ category_labels.get(k.category, k.category)|capitalize }}</a>
+      {% if k.urgency in ("critical", "high") %}<span class="badge b-{{ k.urgency }}">{{ k.urgency }}</span>{% endif %}
+      <div class="small">{{ k.description }}{% if k.quantity_text %} · {{ k.quantity_text }}{% endif %}</div>
+      <div class="small muted">{{ k.school }} · {{ k.case_number }}</div>
+      {% if k.partners %}<div class="small">With: {{ k.partners|join(", ") }}</div>{% endif %}
+      {% if k.plan_type and status in ("new", "matched") %}<span class="badge b-{{ k.plan_type }}">{{ plan_labels[k.plan_type] }}</span>{% endif %}
+    </div>
+    {% else %}<p class="small muted" style="margin:4px">Empty.</p>{% endfor %}
+  </div>
+{% endfor %}
+</div>
+{% endblock %}

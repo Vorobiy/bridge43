@@ -156,7 +156,21 @@
     <p>{{ d.situation.text }} {{ cites(d.situation.citations) }}</p>
     {% if d.operating_status and d.operating_status.note %}<p class="small">{{ d.operating_status.note }} {{ cites(d.operating_status.citations) }}</p>{% endif %}
 
-    {% if d.profile %}
+    {% if d.donor and (d.case_type == "offer" or d.organization.type == "donor") %}
+    <h3>What they can provide</h3>
+    <p>{{ d.donor.provides_summary or "Not summarised yet." }} {{ cites(d.donor.citations) }}</p>
+    <p class="small">
+      {% if d.donor.kind != "unknown" %}<span class="pill">{{ d.donor.kind.replace("_", " ") }}</span>{% endif %}
+      {% for g in d.donor.gives %}<span class="pill">{{ g }}</span>{% endfor %}
+      {% if d.donor.amount %}<span class="pill">{{ d.donor.amount }}</span>{% endif %}
+      {% if d.donor.regions %}<span class="pill">{{ d.donor.regions|join(", ") }}</span>{% endif %}
+      {% if d.donor.timeframe %}<span class="pill">{{ d.donor.timeframe }}</span>{% endif %}
+      {% if d.donor.registered == "yes" %}<span class="pill">registered</span>{% endif %}</p>
+    {% if d.donor.conditions %}<p class="small"><strong>Conditions:</strong> {{ d.donor.conditions }}</p>{% endif %}
+    {% if d.donor.past_work_with_ps43 %}<p class="small"><strong>Past work with PS43 (as they say):</strong> {{ d.donor.past_work_with_ps43 }}</p>{% endif %}
+    {% endif %}
+
+    {% if d.profile and d.case_type != "offer" %}
     <h3>School profile{% if d._follow_up and d._follow_up.complete is not none %} <span class="small muted">· {{ d._follow_up.complete }}% complete</span>{% endif %}</h3>
     <div class="profile">
     {% for k in profile_keys %}{% set p = d.profile[k] %}
@@ -186,7 +200,8 @@
     <h3>Offers</h3>
     <table><thead><tr><th>Offer</th><th>Qty</th><th>Availability / conditions</th></tr></thead><tbody>
     {% for o in d.offers %}<tr><td><strong>{{ o.category.replace("_", " ") }}</strong> — {{ o.description }} {{ cites(o.citations) }}</td>
-      <td>{{ o.quantity or "—" }}</td><td class="small">{{ o.availability or "" }}{% if o.conditions %}<br>{{ o.conditions }}{% endif %}</td></tr>{% endfor %}
+      <td>{{ o.quantity or "—" }}</td><td class="small">{{ o.availability or "" }}{% if o.conditions %}<br>{{ o.conditions }}{% endif %}
+        {% if o.location %}<br>{{ o.location }}{% endif %}{% if o.abroad %} <span class="badge b-partial">abroad: needs shipping</span>{% endif %}</td></tr>{% endfor %}
     </tbody></table>
     {% endif %}
 
@@ -258,7 +273,9 @@
   </div>
   {% elif summary.status == "approved" %}
   <div class="flash ok" style="margin-top:16px">Case <strong>{{ thread.case_number }}</strong> approved by {{ summary.reviewer }} on {{ summary.reviewed_at[:16].replace("T", " ") }}.{% if summary.review_notes %} Note: {{ summary.review_notes }}{% endif %}
-    Available to the next stage at <a href="/api/threads/{{ thread.id }}">/api/threads/{{ thread.id }}</a>.</div>
+    {% if case_tickets %}<br>Tickets: {% for k in case_tickets %}<a href="/tickets/{{ k.id }}">{{ k.description }}</a> ({{ k.status.replace("_", " ") }}){% if not loop.last %} · {% endif %}{% endfor %}
+    · <a href="/dashboard">see it on the priority matrix</a>{% endif %}
+    {% if partner %}<br>Partner record: <a href="/partners/{{ partner.id }}">{{ partner.name }}</a>{% endif %}</div>
   {% else %}
   <div class="flash err" style="margin-top:16px">Rejected by {{ summary.reviewer }}.{% if summary.review_notes %} Note: {{ summary.review_notes }}{% endif %}</div>
   {% endif %}

@@ -131,7 +131,8 @@ def test_follow_up_english_single_question_and_complete_profile():
 
 
 def test_no_profile_questions_for_partners_or_unrelated_chats():
-    assert gaps.follow_up(summary.normalize(_draft(case_type="offer")))["message"] == ""
+    offer = gaps.follow_up(summary.normalize(_draft(case_type="offer")))
+    assert offer["bank"] == "donor" and "salles de classe" not in offer["message"]  # donors get donor questions
     assert gaps.follow_up(summary.normalize(_draft(organization={"type": "contractor"})))["applies"] is False
     assert gaps.follow_up(summary.normalize(_draft(relevance="not_relevant")))["missing"] == []
 

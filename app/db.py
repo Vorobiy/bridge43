@@ -84,6 +84,125 @@ CREATE INDEX IF NOT EXISTS idx_threads_contact ON threads(contact_id);
 CREATE INDEX IF NOT EXISTS idx_summaries_thread ON summaries(thread_id);
 """
 
+# Part two: donors, tickets (one per school need), deployment steps, message log, follow-ups.
+OPS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS donors (
+    id INTEGER PRIMARY KEY,
+    contact_id INTEGER UNIQUE REFERENCES contacts(id) ON DELETE CASCADE,
+    thread_id INTEGER REFERENCES threads(id) ON DELETE SET NULL,   -- latest approved offer case
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'unknown',  -- individual | diaspora_group | company | ngo | foundation | faith_group | government | other
+    gives TEXT NOT NULL DEFAULT '[]',      -- JSON: money, goods, services, volunteers, transport, expertise
+    regions TEXT NOT NULL DEFAULT '[]',    -- JSON list as stated ("Northwest", "National"...)
+    summary TEXT,                          -- what they can provide, in plain words
+    amount TEXT,
+    timeframe TEXT,
+    conditions TEXT,
+    registered TEXT NOT NULL DEFAULT 'unknown',
+    past_work_note TEXT,                   -- earlier work with PS43 as they described it
+    roles TEXT NOT NULL DEFAULT '[]',      -- JSON: donor, implementer, supplier, shipper
+    verified INTEGER NOT NULL DEFAULT 0,   -- staff checked who they are (registration, references)
+    verified_by TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS donor_items (
+    id INTEGER PRIMARY KEY,
+    donor_id INTEGER NOT NULL REFERENCES donors(id) ON DELETE CASCADE,
+    source_thread_id INTEGER,
+    category TEXT NOT NULL,
+    description TEXT NOT NULL,
+    quantity_text TEXT,
+    quantity_total REAL,                   -- number parsed from quantity_text (400 sheets -> 400)
+    unit TEXT,
+    availability TEXT,
+    conditions TEXT,
+    location TEXT,                         -- where the items are now
+    abroad INTEGER NOT NULL DEFAULT 0,     -- 1 = outside Cameroon, needs shipping
+    status TEXT NOT NULL DEFAULT 'available',  -- available | withdrawn
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tickets (
+    id INTEGER PRIMARY KEY,
+    thread_id INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+    need_key TEXT NOT NULL,
+    category TEXT NOT NULL,
+    description TEXT NOT NULL,
+    quantity_text TEXT,
+    quantity_total REAL,
+    unit TEXT,
+    urgency TEXT NOT NULL DEFAULT 'unknown',
+    status TEXT NOT NULL DEFAULT 'new',    -- new | matched | in_progress | delivered | checked | cancelled
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    delivered_at TEXT,
+    UNIQUE (thread_id, need_key)
+);
+
+CREATE TABLE IF NOT EXISTS ticket_links (     -- donor commitments = the donor's history of cases with PS43
+    id INTEGER PRIMARY KEY,
+    ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    donor_id INTEGER NOT NULL REFERENCES donors(id) ON DELETE CASCADE,
+    donor_item_id INTEGER REFERENCES donor_items(id) ON DELETE SET NULL,
+    quantity REAL,
+    status TEXT NOT NULL DEFAULT 'committed',  -- committed | delivered | completed | cancelled
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ticket_steps (
+    id INTEGER PRIMARY KEY,
+    ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    owner TEXT NOT NULL DEFAULT 'ps43',    -- ps43 | partner | school
+    due TEXT,
+    done_at TEXT,
+    done_by TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ticket_events (    -- the communication and activity log
+    id INTEGER PRIMARY KEY,
+    ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    at TEXT NOT NULL,
+    who TEXT,
+    kind TEXT NOT NULL,                    -- created | status | match | message | note | step | followup
+    text TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS followups (
+    id INTEGER PRIMARY KEY,
+    ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    days INTEGER NOT NULL,                 -- 30 | 90 | 180 after delivery
+    due_on TEXT NOT NULL,                  -- YYYY-MM-DD
+    sent_at TEXT,
+    sent_by TEXT,
+    UNIQUE (ticket_id, days)
+);
+
+CREATE TABLE IF NOT EXISTS quotes (            -- prices from contractors/suppliers, checked against each other
+    id INTEGER PRIMARY KEY,
+    ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    donor_id INTEGER REFERENCES donors(id) ON DELETE SET NULL,
+    supplier_name TEXT,                    -- when the quote is from someone not in the database
+    amount REAL NOT NULL,                  -- total, in FCFA
+    quantity REAL,
+    unit TEXT,
+    note TEXT,
+    chosen INTEGER NOT NULL DEFAULT 0,
+    added_by TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tickets_thread ON tickets(thread_id);
+CREATE INDEX IF NOT EXISTS idx_links_ticket ON ticket_links(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_links_donor ON ticket_links(donor_id);
+CREATE INDEX IF NOT EXISTS idx_items_donor ON donor_items(donor_id);
+"""
+
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -116,6 +235,7 @@ def tx() -> Iterator[sqlite3.Connection]:
 def init_db() -> None:
     with tx() as conn:
         conn.executescript(SCHEMA)
+        conn.executescript(OPS_SCHEMA)
         _migrate(conn)
 
 
@@ -539,3 +659,312 @@ def _next_case_number(conn: sqlite3.Connection) -> str:
         if r and r["case_number"]:
             highest = max(highest, int(r["case_number"].rsplit("-", 1)[1]))
     return f"{prefix}{highest + 1:04d}"
+
+
+
+# ================================================================ part two: donors, tickets, follow-ups
+
+def _update(table: str, row_id: int, fields: dict[str, Any]) -> None:
+    if not fields:
+        return
+    cols = ", ".join(f"{k} = ?" for k in fields)
+    with tx() as conn:
+        conn.execute(f"UPDATE {table} SET {cols} WHERE id = ?", (*fields.values(), row_id))
+
+
+def _decode_donor(d: dict | None) -> dict | None:
+    if d:
+        d["gives"] = json.loads(d.get("gives") or "[]")
+        d["regions"] = json.loads(d.get("regions") or "[]")
+        d["roles"] = json.loads(d.get("roles") or "[]")
+    return d
+
+
+def upsert_donor(contact_id: int | None, thread_id: int | None, **fields: Any) -> dict[str, Any]:
+    """One donor per contact. Later approved offers update the record (staff checks are kept)."""
+    for k in ("gives", "regions", "roles"):
+        if k in fields:
+            fields[k] = json.dumps(fields[k], ensure_ascii=False)
+    ts = now()
+    with tx() as conn:
+        existing = conn.execute("SELECT id FROM donors WHERE contact_id = ?", (contact_id,)).fetchone() \
+            if contact_id is not None else None
+        if existing:
+            cols = ", ".join(f"{k} = ?" for k in fields)
+            conn.execute(f"UPDATE donors SET {cols}, thread_id = COALESCE(?, thread_id), updated_at = ? WHERE id = ?",
+                         (*fields.values(), thread_id, ts, existing["id"]))
+            donor_id = existing["id"]
+        else:
+            keys = ["contact_id", "thread_id", *fields, "created_at", "updated_at"]
+            cur = conn.execute(f"INSERT INTO donors ({', '.join(keys)}) VALUES ({', '.join('?' * len(keys))})",
+                               (contact_id, thread_id, *fields.values(), ts, ts))
+            donor_id = cur.lastrowid
+        return _decode_donor(dict(conn.execute("SELECT * FROM donors WHERE id = ?", (donor_id,)).fetchone()))
+
+
+def get_donor(donor_id: int) -> dict[str, Any] | None:
+    with tx() as conn:
+        return _decode_donor(row(conn.execute("SELECT * FROM donors WHERE id = ?", (donor_id,)).fetchone()))
+
+
+def donor_for_contact(contact_id: int) -> dict[str, Any] | None:
+    with tx() as conn:
+        return _decode_donor(row(conn.execute("SELECT * FROM donors WHERE contact_id = ?", (contact_id,)).fetchone()))
+
+
+def list_donors() -> list[dict[str, Any]]:
+    with tx() as conn:
+        rows = conn.execute(
+            "SELECT d.*, c.address, c.reply_to, c.consent_status, t.case_number FROM donors d "
+            "LEFT JOIN contacts c ON c.id = d.contact_id LEFT JOIN threads t ON t.id = d.thread_id "
+            "ORDER BY d.name COLLATE NOCASE").fetchall()
+        return [_decode_donor(dict(r)) for r in rows]
+
+
+def set_donor(donor_id: int, **fields: Any) -> None:
+    fields["updated_at"] = now()
+    _update("donors", donor_id, fields)
+
+
+def replace_donor_items(donor_id: int, source_thread_id: int | None, items: list[dict[str, Any]]) -> None:
+    """Refresh the items that came from one offer case. Items already promised to a school are kept."""
+    ts = now()
+    with tx() as conn:
+        conn.execute("DELETE FROM donor_items WHERE donor_id = ? AND source_thread_id IS ? AND "
+                     "id NOT IN (SELECT donor_item_id FROM ticket_links WHERE donor_item_id IS NOT NULL)",
+                     (donor_id, source_thread_id))
+        kept = {(r["category"], r["description"].lower()) for r in conn.execute(
+            "SELECT category, description FROM donor_items WHERE donor_id = ?", (donor_id,))}
+        for it in items:
+            if (it["category"], it["description"].lower()) in kept:
+                continue
+            _insert_item(conn, donor_id, source_thread_id, it, ts)
+
+
+def _insert_item(conn: sqlite3.Connection, donor_id: int, source_thread_id: int | None, it: dict, ts: str) -> int:
+    return conn.execute(
+        "INSERT INTO donor_items (donor_id, source_thread_id, category, description, quantity_text, "
+        "quantity_total, unit, availability, conditions, location, abroad, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        (donor_id, source_thread_id, it["category"], it["description"], it.get("quantity_text"),
+         it.get("quantity_total"), it.get("unit"), it.get("availability"), it.get("conditions"),
+         it.get("location"), int(bool(it.get("abroad"))), ts)).lastrowid
+
+
+def add_donor_item(donor_id: int, source_thread_id: int | None, item: dict) -> int:
+    with tx() as conn:
+        return _insert_item(conn, donor_id, source_thread_id, item, now())
+
+
+def list_donor_items(donor_id: int | None = None) -> list[dict[str, Any]]:
+    q = ("SELECT di.*, COALESCE((SELECT SUM(l.quantity) FROM ticket_links l WHERE l.donor_item_id = di.id "
+         "AND l.status != 'cancelled'), 0) AS committed, "
+         "(SELECT COUNT(*) FROM ticket_links l WHERE l.donor_item_id = di.id AND l.status != 'cancelled') AS link_count "
+         "FROM donor_items di ")
+    args: tuple = ()
+    if donor_id is not None:
+        q += "WHERE di.donor_id = ? "
+        args = (donor_id,)
+    with tx() as conn:
+        return [dict(r) for r in conn.execute(q + "ORDER BY di.id", args)]
+
+
+def set_donor_item(item_id: int, **fields: Any) -> None:
+    _update("donor_items", item_id, fields)
+
+
+# ---------------------------------------------------------------- tickets
+
+TICKET_SELECT = ("SELECT k.*, t.case_number, t.title AS case_title, t.contact_id, c.display_name, c.address, "
+                 "c.reply_to, c.consent_status FROM tickets k JOIN threads t ON t.id = k.thread_id "
+                 "JOIN contacts c ON c.id = t.contact_id ")
+
+
+def upsert_ticket(thread_id: int, need_key: str, **fields: Any) -> tuple[dict[str, Any], bool]:
+    """Create the ticket for one school need, or refresh its text. Returns (ticket, created)."""
+    ts = now()
+    with tx() as conn:
+        existing = conn.execute("SELECT id FROM tickets WHERE thread_id = ? AND need_key = ?",
+                                (thread_id, need_key)).fetchone()
+        if existing:
+            cols = ", ".join(f"{k} = ?" for k in fields)
+            conn.execute(f"UPDATE tickets SET {cols}, updated_at = ? WHERE id = ?", (*fields.values(), ts, existing["id"]))
+            tid, created = existing["id"], False
+        else:
+            keys = ["thread_id", "need_key", *fields, "created_at", "updated_at"]
+            tid = conn.execute(f"INSERT INTO tickets ({', '.join(keys)}) VALUES ({', '.join('?' * len(keys))})",
+                               (thread_id, need_key, *fields.values(), ts, ts)).lastrowid
+            created = True
+        return dict(conn.execute(TICKET_SELECT + "WHERE k.id = ?", (tid,)).fetchone()), created
+
+
+def get_ticket(ticket_id: int) -> dict[str, Any] | None:
+    with tx() as conn:
+        return row(conn.execute(TICKET_SELECT + "WHERE k.id = ?", (ticket_id,)).fetchone())
+
+
+def list_tickets(status: str | None = None, thread_id: int | None = None) -> list[dict[str, Any]]:
+    q, args = TICKET_SELECT + "WHERE 1=1 ", []
+    if status:
+        q += "AND k.status = ? "
+        args.append(status)
+    if thread_id is not None:
+        q += "AND k.thread_id = ? "
+        args.append(thread_id)
+    with tx() as conn:
+        return [dict(r) for r in conn.execute(q + "ORDER BY k.id", args)]
+
+
+def set_ticket(ticket_id: int, **fields: Any) -> None:
+    fields["updated_at"] = now()
+    _update("tickets", ticket_id, fields)
+
+
+def add_link(ticket_id: int, donor_id: int, donor_item_id: int | None, quantity: float | None) -> dict[str, Any]:
+    ts = now()
+    with tx() as conn:
+        lid = conn.execute("INSERT INTO ticket_links (ticket_id, donor_id, donor_item_id, quantity, created_at, updated_at) "
+                           "VALUES (?,?,?,?,?,?)", (ticket_id, donor_id, donor_item_id, quantity, ts, ts)).lastrowid
+        return dict(conn.execute("SELECT * FROM ticket_links WHERE id = ?", (lid,)).fetchone())
+
+
+def list_links(ticket_id: int | None = None, donor_id: int | None = None) -> list[dict[str, Any]]:
+    q = ("SELECT l.*, d.name AS donor_name, d.contact_id AS donor_contact_id, di.description AS item_description, "
+         "di.unit AS item_unit, k.category, k.description AS need_description, k.status AS ticket_status, "
+         "k.thread_id, t.case_number, t.title AS case_title FROM ticket_links l JOIN donors d ON d.id = l.donor_id "
+         "LEFT JOIN donor_items di ON di.id = l.donor_item_id JOIN tickets k ON k.id = l.ticket_id "
+         "JOIN threads t ON t.id = k.thread_id WHERE 1=1 ")
+    args: list = []
+    if ticket_id is not None:
+        q += "AND l.ticket_id = ? "
+        args.append(ticket_id)
+    if donor_id is not None:
+        q += "AND l.donor_id = ? "
+        args.append(donor_id)
+    with tx() as conn:
+        return [dict(r) for r in conn.execute(q + "ORDER BY l.id", args)]
+
+
+def set_link(link_id: int, **fields: Any) -> None:
+    fields["updated_at"] = now()
+    _update("ticket_links", link_id, fields)
+
+
+def set_links_for_ticket(ticket_id: int, status: str, only_from: tuple[str, ...]) -> None:
+    marks = ",".join("?" * len(only_from))
+    with tx() as conn:
+        conn.execute(f"UPDATE ticket_links SET status = ?, updated_at = ? WHERE ticket_id = ? AND status IN ({marks})",
+                     (status, now(), ticket_id, *only_from))
+
+
+def add_steps(ticket_id: int, steps: list[tuple[str, str]]) -> None:
+    with tx() as conn:
+        start = conn.execute("SELECT COALESCE(MAX(position), 0) FROM ticket_steps WHERE ticket_id = ?",
+                             (ticket_id,)).fetchone()[0]
+        for n, (title, owner) in enumerate(steps, start + 1):
+            conn.execute("INSERT INTO ticket_steps (ticket_id, position, title, owner) VALUES (?,?,?,?)",
+                         (ticket_id, n, title, owner))
+
+
+def insert_steps(ticket_id: int, before_position: int, steps: list[tuple[str, str]]) -> None:
+    """Insert steps before an existing position (later steps move down)."""
+    with tx() as conn:
+        conn.execute("UPDATE ticket_steps SET position = position + ? WHERE ticket_id = ? AND position >= ?",
+                     (len(steps), ticket_id, before_position))
+        for n, (title, owner) in enumerate(steps):
+            conn.execute("INSERT INTO ticket_steps (ticket_id, position, title, owner) VALUES (?,?,?,?)",
+                         (ticket_id, before_position + n, title, owner))
+
+
+def list_steps(ticket_id: int) -> list[dict[str, Any]]:
+    with tx() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM ticket_steps WHERE ticket_id = ? ORDER BY position",
+                                              (ticket_id,))]
+
+
+def get_step(step_id: int) -> dict[str, Any] | None:
+    with tx() as conn:
+        return row(conn.execute("SELECT * FROM ticket_steps WHERE id = ?", (step_id,)).fetchone())
+
+
+def set_step(step_id: int, **fields: Any) -> None:
+    _update("ticket_steps", step_id, fields)
+
+
+def add_event(ticket_id: int, kind: str, text: str, who: str | None = None, at: str | None = None) -> None:
+    with tx() as conn:
+        conn.execute("INSERT INTO ticket_events (ticket_id, at, who, kind, text) VALUES (?,?,?,?,?)",
+                     (ticket_id, at or now(), who, kind, text))
+
+
+def list_events(ticket_id: int) -> list[dict[str, Any]]:
+    with tx() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM ticket_events WHERE ticket_id = ? ORDER BY at, id",
+                                              (ticket_id,))]
+
+
+def add_followups(ticket_id: int, delivered_on: datetime, days: tuple[int, ...] = (30, 90, 180)) -> None:
+    with tx() as conn:
+        for d in days:
+            conn.execute("INSERT OR IGNORE INTO followups (ticket_id, days, due_on) VALUES (?,?,?)",
+                         (ticket_id, d, (delivered_on + timedelta(days=d)).date().isoformat()))
+
+
+def list_followups(ticket_id: int | None = None, due_by: str | None = None, unsent_only: bool = False) -> list[dict[str, Any]]:
+    q = ("SELECT f.*, k.description, k.category, k.thread_id, t.case_number, t.title AS case_title, t.contact_id, "
+         "c.display_name, c.reply_to, c.address FROM followups f JOIN tickets k ON k.id = f.ticket_id "
+         "JOIN threads t ON t.id = k.thread_id JOIN contacts c ON c.id = t.contact_id WHERE 1=1 ")
+    args: list = []
+    if ticket_id is not None:
+        q += "AND f.ticket_id = ? "
+        args.append(ticket_id)
+    if due_by:
+        q += "AND f.due_on <= ? "
+        args.append(due_by)
+    if unsent_only:
+        q += "AND f.sent_at IS NULL "
+    with tx() as conn:
+        return [dict(r) for r in conn.execute(q + "ORDER BY f.due_on, f.id", args)]
+
+
+def get_followup(followup_id: int) -> dict[str, Any] | None:
+    rows = [f for f in list_followups() if f["id"] == followup_id]
+    return rows[0] if rows else None
+
+
+def set_followup(followup_id: int, **fields: Any) -> None:
+    _update("followups", followup_id, fields)
+
+
+def latest_approved_summary(thread_id: int) -> dict[str, Any] | None:
+    with tx() as conn:
+        return decode_summary(conn.execute(
+            "SELECT * FROM summaries WHERE thread_id = ? AND status = 'approved' ORDER BY version DESC LIMIT 1",
+            (thread_id,)).fetchone())
+
+
+
+def add_quote(ticket_id: int, amount: float, *, donor_id: int | None = None, supplier_name: str | None = None,
+              quantity: float | None = None, unit: str | None = None, note: str | None = None,
+              added_by: str | None = None) -> int:
+    with tx() as conn:
+        return conn.execute(
+            "INSERT INTO quotes (ticket_id, donor_id, supplier_name, amount, quantity, unit, note, added_by, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (ticket_id, donor_id, supplier_name, amount, quantity, unit, note, added_by, now())).lastrowid
+
+
+def list_quotes(ticket_id: int | None = None) -> list[dict[str, Any]]:
+    q = ("SELECT q.*, COALESCE(d.name, q.supplier_name, 'Unnamed supplier') AS who, k.category, k.unit AS need_unit "
+         "FROM quotes q JOIN tickets k ON k.id = q.ticket_id LEFT JOIN donors d ON d.id = q.donor_id ")
+    args: tuple = ()
+    if ticket_id is not None:
+        q += "WHERE q.ticket_id = ? "
+        args = (ticket_id,)
+    with tx() as conn:
+        return [dict(r) for r in conn.execute(q + "ORDER BY q.id", args)]
+
+
+def choose_quote(ticket_id: int, quote_id: int) -> None:
+    with tx() as conn:
+        conn.execute("UPDATE quotes SET chosen = (id = ?) WHERE ticket_id = ?", (quote_id, ticket_id))

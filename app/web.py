@@ -126,7 +126,8 @@ def thread_page(request: Request, thread_id: int, msg: str | None = None, error:
         summary_json=json.dumps(summary["data"], indent=2, ensure_ascii=False) if summary else "",
         twilio_enabled=settings.twilio_enabled, can_message=db.is_messageable(contact.get("reply_to") or contact["address"]),
         reply_to=contact.get("reply_to") or contact["address"], channels=sorted({i["channel"] for i in items}),
-        other_cases=[t for t in db.list_threads() if t["id"] != thread_id]))
+        other_cases=[t for t in db.list_threads() if t["id"] != thread_id],
+        case_tickets=db.list_tickets(thread_id=thread_id), partner=db.donor_for_contact(contact["id"])))
 
 
 def _back(thread_id: int, **q: str) -> RedirectResponse:
@@ -215,7 +216,14 @@ def approve(summary_id: int, notes: str = Form(""), who: str = Depends(staff)):
     db.update_summary(summary_id, status="approved", reviewer=who, review_notes=notes.strip() or None,
                       reviewed_at=db.now(), case_number=case_number)
     db.set_thread(s["thread_id"], status="approved", stale_summary=0)
-    return _back(s["thread_id"], msg=f"Case {case_number} approved. New messages from this contact keep coming into it.")
+    from . import workflow
+    made = workflow.on_case_approved(s["thread_id"], who)
+    extra = ""
+    if made.get("tickets"):
+        extra = f" {len(made['tickets'])} new ticket(s) opened for its needs."
+    elif made.get("partner"):
+        extra = f" {made['partner']['name']} is in the partners database."
+    return _back(s["thread_id"], msg=f"Case {case_number} approved.{extra} New messages from this contact keep coming into it.")
 
 
 @router.post("/summaries/{summary_id}/reject")
