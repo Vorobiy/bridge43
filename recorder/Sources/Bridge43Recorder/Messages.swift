@@ -354,7 +354,11 @@ func watchMessages() async {
                 report(.ok(lastFiled: lastFiled))
             } catch {
                 let text = "\(error)"
-                if text != lastProblem { log("WhatsApp messages: \(text)") }
+                if text != lastProblem {
+                    log("WhatsApp messages: \(text)")
+                    notify("Bridge43 can't read WhatsApp messages",
+                           "Click the Bridge43 icon at the top right → allow Full Disk Access.")
+                }
                 lastProblem = text
                 report(text.contains("cannot open") || text.contains("no access") ? .noAccess : .error(text))
             }
