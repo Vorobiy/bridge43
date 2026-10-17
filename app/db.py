@@ -197,6 +197,11 @@ CREATE TABLE IF NOT EXISTS quotes (            -- prices from contractors/suppli
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS app_settings (     -- staff-editable settings (scoring weights, unit costs, demo flag)
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_tickets_thread ON tickets(thread_id);
 CREATE INDEX IF NOT EXISTS idx_links_ticket ON ticket_links(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_links_donor ON ticket_links(donor_id);
@@ -968,3 +973,28 @@ def list_quotes(ticket_id: int | None = None) -> list[dict[str, Any]]:
 def choose_quote(ticket_id: int, quote_id: int) -> None:
     with tx() as conn:
         conn.execute("UPDATE quotes SET chosen = (id = ?) WHERE ticket_id = ?", (quote_id, ticket_id))
+
+
+
+def get_setting(key: str, default: Any = None) -> Any:
+    with tx() as conn:
+        r = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+    return json.loads(r["value"]) if r else default
+
+
+def set_setting(key: str, value: Any) -> None:
+    with tx() as conn:
+        conn.execute("INSERT INTO app_settings (key, value) VALUES (?, ?) "
+                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, json.dumps(value)))
+
+
+def activity_counts() -> dict[str, Any]:
+    """Volumes used for the cost-per-case estimate on the Impact page."""
+    with tx() as conn:
+        one = lambda q: conn.execute(q).fetchone()[0]
+        return {
+            "cases": one("SELECT COUNT(*) FROM threads WHERE status NOT IN ('rejected', 'not_relevant')"),
+            "ai_drafts": one("SELECT COUNT(*) FROM summaries WHERE model NOT LIKE 'demo%'") ,
+            "messages": one("SELECT COUNT(*) FROM items WHERE channel IN ('whatsapp', 'sms')"),
+            "first_contact": one("SELECT MIN(opened_at) FROM threads"),
+        }

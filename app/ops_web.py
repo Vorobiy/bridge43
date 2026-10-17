@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from . import db, matching, scoring, workflow
+from . import db, geo, matching, scoring, workflow
 from .summary import DONOR_KINDS, NEED_CATEGORIES
 from .web import _ctx, staff, templates
 
@@ -65,7 +65,7 @@ def _plot(cases: list[dict]) -> list[dict]:
         s = c["score"]
         x = L + 10 + s["readiness"] / 100 * (W - L - 28)
         y = H - B - 10 - s["need"] / 100 * (H - B - 28)
-        name = s["name"].replace(" (fictional)", "")[:24]
+        name = s["name"] if len(s["name"]) <= 22 else s["name"][:21].rstrip() + "…"
         left = s["readiness"] > 60
         width = 6.3 * len(name)
         x0, x1 = (x - 11 - width, x - 11) if left else (x + 11, x + 11 + width)
@@ -107,7 +107,7 @@ def dashboard(request: Request, region: str = "", msg: str | None = None, error:
         "partners": len(db.list_donors()),
     }
     return _render(request, "dashboard.html", view=view, kpis=kpis, regions=regions, region=region,
-                   plot=_plot(view["cases"]), W=W, H=H, L=L, B=B,
+                   plot=_plot(view["cases"]), W=W, H=H, L=L, B=B, geo=geo.map_view(view["cases"]),
                    followups=workflow.followups_due(), msg=msg, error=error)
 
 
@@ -162,7 +162,8 @@ def ticket_page(request: Request, ticket_id: int, msg: str | None = None, error:
         linked=linked, partner_text=workflow.partner_message(t, first) if first else "",
         partner_default=first["id"] if first else None, school_text=workflow.school_update_message(t),
         partner_texts={d["id"]: workflow.partner_message(t, d) for d in donors if d.get("contact_id")},
-        statuses=workflow.STATUSES, msg=msg, error=error)
+        statuses=workflow.STATUSES, msg=msg, error=error, stage=workflow.TICKET_STAGE.get(t["status"]),
+        next=workflow.ticket_next_step(t, m["plan"], db.list_steps(ticket_id)))
 
 
 @router.post("/tickets/{ticket_id}/status")
@@ -181,12 +182,13 @@ def ticket_assign(ticket_id: int, donor_id: int = Form(...), item_id: str = Form
 
 
 @router.post("/tickets/{ticket_id}/assign-plan")
-def ticket_assign_plan(ticket_id: int, who: str = Depends(staff)):
+def ticket_assign_plan(ticket_id: int, back: str = Form(""), who: str = Depends(staff)):
     t = _ticket_or_404(ticket_id)
     plan = workflow.ticket_matches(t)["plan"]
     for p in plan["picks"]:
         workflow.assign(ticket_id, p["donor_id"], p["item_id"], p["covers"], who)
-    return _go(f"/tickets/{ticket_id}", msg=f"Added {len(plan['picks'])} partner(s) from the suggested plan.")
+    msg = f"Added {len(plan['picks'])} partner(s) to “{t['description']}”. Next: message them from the ticket."
+    return _go(back if back.startswith("/") else f"/tickets/{ticket_id}", msg=msg)
 
 
 @router.post("/tickets/{ticket_id}/links/{link_id}/cancel")
@@ -377,3 +379,65 @@ def api_matches():
          "category": r["ticket"]["category"], "plan": r["plan"]["type"],
          "partners": [{"name": p["donor_name"], "item": p["item"], "covers": p["covers"], "score": p["score"]}
                       for p in r["plan"]["picks"]]} for r in cov["rows"]]})
+
+
+
+# ------------------------------------------------------------------ Today, Impact, Settings
+
+@router.get("/today", response_class=HTMLResponse)
+def today(request: Request, msg: str | None = None, error: str | None = None):
+    now = datetime.now(timezone.utc)
+    return _render(request, "today.html", v=workflow.today_view(), date=now.strftime("%A %d %B %Y"), msg=msg,
+                   error=error, counts=workflow.journey_counts())
+
+
+@router.get("/search", response_class=HTMLResponse)
+def search_page(request: Request, q: str = ""):
+    return _render(request, "search.html", r=workflow.search(q))
+
+
+@router.get("/impact", response_class=HTMLResponse)
+def impact(request: Request):
+    return _render(request, "impact.html", v=workflow.impact_view(),
+                   date=datetime.now(timezone.utc).strftime("%d %B %Y"))
+
+
+@router.get("/api/impact")
+def api_impact():
+    v = workflow.impact_view()
+    v["stories"] = [{"school": s["school"], "need": s["ticket"]["description"], "partners": s["partners"],
+                     "pupils": s["pupils"], "delivered_at": s["ticket"]["delivered_at"]} for s in v["stories"]]
+    return JSONResponse(v)
+
+
+@router.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request, msg: str | None = None):
+    return _render(request, "settings.html", cfg=scoring.config(), defaults=scoring.defaults(), regions=geo.REGIONS,
+                   area_labels=scoring.AREA_LABELS, readiness_labels=scoring.READINESS_LABELS,
+                   costs=db.get_setting("costs", {}) or {}, msg=msg)
+
+
+@router.post("/settings")
+async def settings_save(request: Request, who: str = Depends(staff)):
+    form = await request.form()
+    if form.get("reset"):
+        db.set_setting("scoring", {})
+        return _go("/settings", msg="Back to the default weights.")
+    def n(key, default=0):
+        v = _num(str(form.get(key, "")))
+        return default if v is None else v
+    d = scoring.defaults()
+    db.set_setting("scoring", {
+        "need_weights": {k: int(n(f"w_{k}", d["need_weights"][k])) for k in scoring.NEED_WEIGHTS},
+        "readiness_points": {k: [int(n(f"r_{k}_full", v[0])), int(n(f"r_{k}_part", v[1]))]
+                             for k, v in d["readiness_points"].items()},
+        "split": int(n("split", d["split"])),
+        "vulnerability_max": int(n("vulnerability_max", d["vulnerability_max"])),
+        "crisis_regions": [r for r in geo.REGIONS if form.get(f"crisis_{r}")] if form.get("crisis_form") else d["crisis_regions"],
+        "changed_by": who,
+    })
+    db.set_setting("costs", {"per_ai_draft": _num(str(form.get("per_ai_draft", ""))),
+                             "per_message": _num(str(form.get("per_message", ""))),
+                             "monthly_hosting": _num(str(form.get("monthly_hosting", ""))),
+                             "currency": (str(form.get("currency") or "USD")).strip()[:5]})
+    return _go("/settings", msg="Saved. Priorities now use these weights.")

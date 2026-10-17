@@ -1,9 +1,11 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}{{ t.description }}{% endblock %}
 {% block body %}
-<p class="small"><a href="/tickets">← Tickets</a> · <a href="/dashboard">Priorities</a></p>
+<p class="small"><a href="/tickets">← Needs</a> · <a href="/dashboard">Schools</a></p>
 {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
 {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+{{ ui.journey(stage) }}
 
 <div class="panel">
   <div class="row" style="align-items:flex-start">
@@ -16,19 +18,22 @@
         {% if score %}· {{ [score.town, score.region]|select|join(", ") }}{% if score.students %} · {{ score.students }} pupils{% endif %}
         · <span class="badge q-{{ score.quadrant }}" style="background:var(--q); color:var(--qt)">{{ score.quadrant_label }}</span>{% endif %}
         · {{ t.case_number }}</p>
+      {% if score %}<p class="small" style="margin:6px 0 0">{{ score.why }}</p>{% endif %}
     </div>
-    <form method="post" action="/tickets/{{ t.id }}/status" class="row" style="flex:0 0 260px; align-items:flex-end">
-      <div><label for="st">Status</label><select id="st" name="status">{% for s in statuses %}<option value="{{ s }}" {% if s == t.status %}selected{% endif %}>{{ status_labels[s] }}</option>{% endfor %}</select></div>
+    <details style="flex:0 0 220px"><summary class="small muted">Change status by hand</summary>
+    <form method="post" action="/tickets/{{ t.id }}/status" class="row" style="align-items:flex-end">
+      <div><select id="st" name="status" aria-label="Status">{% for s in statuses %}<option value="{{ s }}" {% if s == t.status %}selected{% endif %}>{{ status_labels[s] }}</option>{% endfor %}</select></div>
       <div style="flex:0 0 auto"><button type="submit">Set</button></div>
-    </form>
+    </form></details>
   </div>
 </div>
+<div style="margin-top:16px">{{ ui.next_step(next) }}</div>
 
-<div class="grid2" style="margin-top:16px">
+<div class="grid2">
 <div>
   <!-- partners on this need -->
   <div class="panel">
-    <h2 style="margin-top:0">Partners</h2>
+    <h2 style="margin-top:0">{{ ui.icon("partners") }} Partners</h2>
     {% if linked %}
     <table><thead><tr><th>Partner</th><th>Gives</th><th>Status</th><th></th></tr></thead><tbody>
     {% for l in linked %}<tr><td><a href="/partners/{{ l.donor_id }}">{{ l.donor_name }}</a></td>
@@ -56,8 +61,8 @@
   </div>
 
   {% if m.candidates and t.status in ("new", "matched", "in_progress") %}
-  <div class="panel" style="margin-top:16px; overflow-x:auto">
-    <h2 style="margin-top:0">All possible partners ({{ m.candidates|length }})</h2>
+  <details class="more-box" style="overflow-x:auto" {% if t.status == "new" and m.plan.type in ("none", "related") %}open{% endif %}>
+    <summary>{{ ui.icon("match") }} All possible partners ({{ m.candidates|length }})</summary>
     <p class="small muted">What each partner has in common with this need: type of help, place, quantity and trust.</p>
     <table><thead><tr><th>Partner and item</th><th>Match</th><th>Why</th><th></th></tr></thead><tbody>
     {% for c in m.candidates %}
@@ -70,12 +75,12 @@
         <input type="text" name="quantity" value="{{ (c.covers)|qty if c.covers else '' }}" placeholder="qty" style="width:70px">
         <button type="submit">Add</button></form></td></tr>
     {% endfor %}</tbody></table>
-  </div>
+  </details>
   {% endif %}
 
   <!-- quotes -->
-  <div class="panel" style="margin-top:16px; overflow-x:auto">
-    <h2 style="margin-top:0">Quotes and price check</h2>
+  <details class="more-box" style="overflow-x:auto" {% if quotes %}open{% endif %}>
+    <summary>Quotes and price check ({{ quotes|length }})</summary>
     <p class="small muted">Every price is compared with other quotes for the same thing (any school). More than 25% above is flagged, so prices are not inflated.</p>
     {% if quotes %}
     <table><thead><tr><th>From</th><th>Total (FCFA)</th><th>Per unit</th><th>Check</th><th></th></tr></thead><tbody>
@@ -87,7 +92,7 @@
       <td>{% if not q.chosen %}<form class="inline" method="post" action="/tickets/{{ t.id }}/quotes/{{ q.id }}/choose"><button type="submit">Choose</button></form>{% endif %}</td>
     </tr>{% endfor %}</tbody></table>
     {% endif %}
-    <details {% if not quotes %}open{% endif %}><summary>Add a quote</summary>
+    <details><summary>Add a quote</summary>
       <form method="post" action="/tickets/{{ t.id }}/quotes">
         <div class="row">
           <div><label>From a partner</label><select name="donor_id"><option value="">— not in the database —</option>{% for d in donors %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select></div>
@@ -102,21 +107,27 @@
         <p><button type="submit">Save quote</button></p>
       </form>
     </details>
-  </div>
+  </details>
 </div>
 
 <div>
   <!-- steps -->
   <div class="panel">
-    <h2 style="margin-top:0">Deployment steps</h2>
-    <ol style="padding-left:20px">
+    <h2 style="margin-top:0">{{ ui.icon("deliver") }} Deployment steps</h2>
+    {% set ns = namespace(current=None) %}
+    {% for s in steps %}{% if not s.done_at and ns.current is none %}{% set ns.current = s.id %}{% endif %}{% endfor %}
+    <ol class="stepper">
     {% for s in steps %}
-      <li style="margin-bottom:6px">{% if s.done_at %}<s>{{ s.title }}</s> <span class="small muted">done {{ s.done_at[:10] }} by {{ s.done_by }}</span>
-        {% else %}{{ s.title }} <span class="small muted">· {{ s.owner }}{% if s.due %} · due {{ s.due }}{% endif %}</span>
-        <form class="inline" method="post" action="/tickets/{{ t.id }}/steps/{{ s.id }}/done"><button type="submit">Done</button></form>{% endif %}</li>
+      <li class="{{ 'done' if s.done_at else ('now' if s.id == ns.current else 'later') }}">
+        <span class="dot">{% if s.done_at %}{{ ui.icon("yes", 14) }}{% else %}{{ loop.index }}{% endif %}</span>
+        <span class="what">{{ s.title }}
+          <span class="small muted">{% if s.done_at %}done {{ s.done_at[:10] }} by {{ s.done_by }}{% else %}{{ {"ps43": "PS43", "partner": "partner", "school": "school"}.get(s.owner, s.owner) }}{% if s.due %} · due {{ s.due }}{% endif %}{% endif %}</span></span>
+        {% if not s.done_at %}<form class="inline" method="post" action="/tickets/{{ t.id }}/steps/{{ s.id }}/done">
+          <button type="submit" {% if s.id == ns.current %}class="primary"{% endif %}>Done</button></form>{% endif %}
+      </li>
     {% endfor %}
     </ol>
-    <p class="small muted">The ticket becomes Delivered when the work steps are done, and Confirmed when the school confirms. Only a school confirmation raises the partner's trust.</p>
+    <p class="small muted">The need becomes Delivered when the work steps are done, and Confirmed when the school confirms. Only a school confirmation raises the partner's trust.</p>
     <details><summary>Add a step</summary>
       <form method="post" action="/tickets/{{ t.id }}/steps" class="row" style="align-items:flex-end">
         <div style="flex:3"><label>Step</label><input type="text" name="title" required></div>
@@ -129,7 +140,7 @@
 
   <!-- messages -->
   <div class="panel" style="margin-top:16px">
-    <h2 style="margin-top:0">Message</h2>
+    <h2 style="margin-top:0" id="message">{{ ui.icon("message") }} Message</h2>
     <form method="post" action="/tickets/{{ t.id }}/message">
       <label for="to">To</label>
       <select id="to" name="to" onchange="var o=this.selectedOptions[0]; if(o.dataset.text) document.getElementById('mt').value=o.dataset.text;">

@@ -1,0 +1,83 @@
+{# Shared visual pieces. Icons: Feather icons (MIT licence, feathericons.com), drawn inline so they work offline. #}
+{% macro icon(name, size=18, cls="") -%}
+<svg class="ic {{ cls }}" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{%- if name == "today" %}<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+{%- elif name == "inbox" %}<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+{%- elif name == "school" %}<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+{%- elif name == "needs" %}<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/>
+{%- elif name == "partners" %}<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+{%- elif name == "impact" or name == "rank" %}<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+{%- elif name == "settings" %}<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>
+{%- elif name == "search" or name == "check" %}<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+{%- elif name == "request" or name == "message" %}<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+{%- elif name == "match" %}<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+{%- elif name == "deliver" or name == "road" %}<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+{%- elif name == "confirm" %}<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+{%- elif name == "power" %}<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+{%- elif name == "signal" %}<path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>
+{%- elif name == "storage" %}<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+{%- elif name == "maintainer" %}<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+{%- elif name == "parents" %}<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+{%- elif name == "map" %}<polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/>
+{%- elif name == "list" %}<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+{%- elif name == "grid" %}<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+{%- elif name == "arrow" %}<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+{%- elif name == "yes" %}<polyline points="20 6 9 17 4 12"/>
+{%- elif name == "no" %}<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+{%- elif name == "partial" %}<line x1="5" y1="12" x2="19" y2="12"/>
+{%- elif name == "unknown" %}<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+{%- else %}<circle cx="12" cy="12" r="10"/>{% endif -%}
+</svg>
+{%- endmacro %}
+
+{# The journey every request follows. current = stage key; counts = {stage: n} to show big numbers (Today). #}
+{% set JOURNEY = [
+  ("request", "Request", "request", "/?status=open", "messages coming in"),
+  ("check", "Check", "check", "/?status=draft_ready", "drafts to approve"),
+  ("rank", "Rank", "rank", "/dashboard", "schools ranked"),
+  ("match", "Match", "match", "/tickets#col-new", "needs without a partner"),
+  ("deliver", "Deliver", "deliver", "/tickets#col-in_progress", "being delivered"),
+  ("confirm", "Confirm", "confirm", "/tickets#col-delivered", "waiting for the school"),
+] %}
+{% macro journey(current=None, counts=None, big=False) -%}
+{% set keys = JOURNEY|map(attribute=0)|list %}
+{% set pos = keys.index(current) if current in keys else -1 %}
+<nav class="journey {{ 'big' if big else '' }}" aria-label="Where this is in the journey">
+{% for key, label, ic, href, hint in JOURNEY %}
+  <a href="{{ href }}" class="step {{ 'done' if loop.index0 < pos else '' }} {{ 'now' if loop.index0 == pos else '' }}">
+    <span class="ico">{{ icon(ic, 22 if big else 16) }}</span>
+    <span class="lbl">{{ label }}</span>
+    {% if counts is not none %}<strong>{{ counts.get(key, 0) }}</strong><span class="hint">{{ hint }}</span>{% endif %}
+  </a>
+{% endfor %}
+</nav>
+{%- endmacro %}
+
+{% macro meter(value, kind="need") -%}
+<span class="meter2 {{ kind }}" title="{{ kind }} {{ value }}/100"><i style="width:{{ value }}%"></i></span>
+{%- endmacro %}
+
+{% set READY_ICONS = {"electricity": ("power", "Power"), "internet": ("signal", "Phone signal"),
+  "secure_storage": ("storage", "Secure storage"), "trained_staff": ("maintainer", "Someone to maintain it"),
+  "road_access": ("road", "Truck access"), "parent_association": ("parents", "Parents' association")} %}
+{% macro readiness_icons(readiness) -%}
+<div class="ready-row">
+{% for key, (ic, label) in READY_ICONS.items() %}{% set r = (readiness or {}).get(key) or {} %}{% set st = r.get("status", "unknown") %}
+  <span class="ready r-{{ st }}" title="{{ label }}: {{ st }}{% if r.get('note') %} ({{ r.get('note') }}){% endif %}">
+    {{ icon(ic, 18) }}<span class="mark">{{ icon({"yes": "yes", "no": "no", "partial": "partial"}.get(st, "unknown"), 12) }}</span>
+    <span class="rl">{{ label }}</span></span>
+{% endfor %}
+</div>
+{%- endmacro %}
+
+{# One clear next action. step = {label, hint, href} or {label, hint, action (POST url), fields} #}
+{% macro next_step(step) -%}
+{% if step %}
+<div class="next">
+  <div class="next-what"><span class="eyebrow">Next step</span><strong>{{ step.label }}</strong>{% if step.hint %}<span class="small muted">{{ step.hint }}</span>{% endif %}</div>
+  {% if step.action %}<form method="post" action="{{ step.action }}">{% for k, v in (step.fields or {}).items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+    <button class="primary big-btn" type="submit">{{ step.button or step.label }} {{ icon("arrow", 18) }}</button></form>
+  {% elif step.href %}<a class="btn primary big-btn" href="{{ step.href }}">{{ step.button or "Go" }} {{ icon("arrow", 18) }}</a>{% endif %}
+</div>
+{% endif %}
+{%- endmacro %}

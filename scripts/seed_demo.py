@@ -1,15 +1,15 @@
 """Load fictional demo data (one school need, one partner offer) so the screens can be shown
 without any API keys. Run:  python -m scripts.seed_demo
 
-All schools, people and numbers here are invented for the demo.
+All schools, people and numbers here are invented for the demo (the app shows a "Demo data" banner).
 """
 from __future__ import annotations
 
-from app import db
+from app import db, matching
 
 SCHOOL = [
     ("in", "text", "Mr. Fon (Principal)", "2026-10-14T08:12:00+00:00",
-     "Bonjour PS43. Je suis M. Fon, proviseur du Lycée de Bambui-Colline (fictif). Notre école a besoin d'aide."),
+     "Bonjour PS43. Je suis M. Fon, proviseur du Lycée des Hauts-Plateaux. Notre école a besoin d'aide."),
     ("out", "text", "Eugene (PS43)", "2026-10-14T08:20:00+00:00",
      "Bonjour M. Fon, merci. Pouvez-vous nous dire combien d'élèves et quels sont les problèmes principaux ?"),
     ("in", "audio", "Mr. Fon (Principal)", "2026-10-14T09:02:00+00:00", None,
@@ -29,8 +29,8 @@ SCHOOL = [
 
 SCHOOL_DRAFT = {
     "case_type": "need",
-    "title": "Lycée de Bambui-Colline — 3 leaking classrooms, 60 desks, girls' latrines",
-    "organization": {"name": "Lycée de Bambui-Colline (fictional)", "type": "school", "region": "Northwest",
+    "title": "Lycée des Hauts-Plateaux — 3 leaking classrooms, 60 desks, girls' latrines",
+    "organization": {"name": "Lycée des Hauts-Plateaux", "type": "school", "region": "Northwest",
                      "town": "Bambui", "citations": [1]},
     "situation": {"text": "Secondary school with 540 students and 14 teachers in 8 classrooms. The roof of 3 classrooms "
                           "leaks, so students in those rooms go home when it rains. The girls' latrines have been broken "
@@ -69,7 +69,7 @@ SCHOOL_DRAFT = {
         "parent_association": {"status": "yes", "note": "APEE can provide labour for the roofing", "citations": [5]},
     },
     "numbers": {"students": 540, "teachers": 14, "classrooms": 8, "citations": [3]},
-    "people": [{"name": "M. Fon", "role": "Principal (proviseur)", "organization": "Lycée de Bambui-Colline", "citations": [1]}],
+    "people": [{"name": "M. Fon", "role": "Principal (proviseur)", "organization": "Lycée des Hauts-Plateaux", "citations": [1]}],
     "plan": [
         {"action": "Call the principal back next week to arrange a site visit", "owner": "ps43", "due": "week of 19 Oct",
          "agreed": True, "citations": [6]},
@@ -88,7 +88,7 @@ SCHOOL_DRAFT = {
 
 PARTNER = [
     ("in", "text", "Ngwa (BuildRight Bamenda)", "2026-10-15T14:00:00+00:00",
-     "Hello PS43, this is Ngwa from BuildRight Bamenda (fictional), a roofing contractor. We have 400 aluminium "
+     "Hello PS43, this is Ngwa from BuildRight Bamenda, a roofing contractor. We have 400 aluminium "
      "roofing sheets left from a project and a team free from mid-November. We work in the Northwest only."),
     ("in", "audio", "Ngwa (BuildRight Bamenda)", "2026-10-15T14:03:00+00:00", None,
      "We can give the sheets at cost price, and our team can do about two classrooms per week if the community provides labourers."),
@@ -97,7 +97,7 @@ PARTNER = [
 PARTNER_DRAFT = {
     "case_type": "offer",
     "title": "BuildRight Bamenda — 400 roofing sheets + roofing team from mid-November",
-    "organization": {"name": "BuildRight Bamenda (fictional)", "type": "contractor", "region": "Northwest", "town": "Bamenda", "citations": [7]},
+    "organization": {"name": "BuildRight Bamenda", "type": "contractor", "region": "Northwest", "town": "Bamenda", "citations": [7]},
     "situation": {"text": "Roofing contractor with surplus aluminium sheets and a team available from mid-November, Northwest region only.", "citations": [7, 8]},
     "needs": [],
     "offers": [
@@ -150,10 +150,15 @@ def load(address: str, name: str, channel: str, messages: list, draft: dict) -> 
 # ---------------------------------------------------------------- part two demo (all fictional)
 
 def _school(name, town, region, pupils, girls, profile, readiness, needs, status="open", safe="yes", lang="French",
-            situation=""):
+            situation="", vulnerable=None):
     lvl = {"ok", "partial", "critical"}
+    v = {"conflict_affected": "unknown", "displaced_pupils": None, "pupils_with_disability": None, "orphans": None,
+         "note": None, "citations": [1]}
+    v.update(vulnerable or {})
     return {
-        "relevance": "relevant", "case_type": "need", "title": f"{name} - " + ", ".join(n[1] for n in needs)[:80],
+        "vulnerability": v,
+        "relevance": "relevant", "case_type": "need",
+        "title": f"{name} - " + ", ".join(matching.CATEGORY_LABELS.get(n[0], n[0]) for n in needs),
         "organization": {"name": name, "type": "school", "region": region, "town": town, "citations": [1]},
         "operating_status": {"status": status, "safe_to_reach": safe, "note": None, "citations": [1]},
         "situation": {"text": situation or f"{name} in {town} has {pupils} pupils.", "citations": [1]},
@@ -162,7 +167,12 @@ def _school(name, town, region, pupils, girls, profile, readiness, needs, status
         "numbers": {"students": pupils, "girls": girls, "citations": [1]},
         "needs": [{"category": c, "description": d, "quantity": q, "urgency": u, "citations": [1]} for c, d, q, u in needs],
         "language": lang, "confidence": "high",
-        "confirmation_message": {"language": lang, "text": "PS43: ..."},
+        "confirmation_message": {"language": lang, "text": (
+            f"PS43 : merci. Nous avons compris : {name}, {pupils} élèves. Besoins : "
+            + "; ".join(f"{d} ({q})" for _, d, q, _ in needs) + ". Est-ce correct ? Répondez OUI ou corrigez-nous."
+            if lang == "French" else
+            f"PS43: thank you. We understood: {name}, {pupils} pupils. Needs: "
+            + "; ".join(f"{d} ({q})" for _, d, q, _ in needs) + ". Is that right? Reply YES or correct us.")},
     }
 
 
@@ -179,7 +189,9 @@ def _partner(name, kind, gives, regions, offers, summary, org_type="donor", regi
                     "location": loc, "abroad": abroad, "citations": [1]} for c, d, q, cond, loc, abroad in offers],
         "people": [{"name": name, "role": "contact", "organization": name, "citations": [1]}],
         "language": lang, "confidence": "high",
-        "confirmation_message": {"language": lang, "text": "PS43: ..."},
+        "confirmation_message": {"language": lang, "text": (
+            f"PS43 : merci {name}. Nous avons compris : {summary} Est-ce correct ? Répondez OUI ou corrigez-nous."
+            if lang == "French" else f"PS43: thank you {name}. We understood: {summary} Is that right? Reply YES or correct us.")},
     }
 
 
@@ -235,86 +247,89 @@ def load_part_two(bambui_thread: int, buildright_thread: int) -> None:
     full = dict(electricity="yes", internet="yes", secure_storage="yes", trained_staff="yes", road_access="yes",
                 parent_association="yes", space="yes")
     S = [
-        ("whatsapp:+237600000011", "M. Abba (CES de Mokolo)", "Bonjour, le CES de Mokolo n'a pas d'eau. Les élèves marchent 3 km.",
-         _school("CES de Mokolo (fictional)", "Mokolo", "Far North", 640, 290,
+        ("whatsapp:+237600000011", "M. Abba (CES Soleil de Mokolo)", "Bonjour, le CES Soleil de Mokolo n'a pas d'eau. Les élèves marchent 3 km.",
+         _school("CES Soleil de Mokolo", "Mokolo", "Far North", 640, 290,
                  dict(learning_space="partial", water_toilets="critical", teachers="partial", materials_results="partial",
                       barriers="partial", health_wellbeing="partial", technology="unknown", safety_operation="ok"),
                  dict(electricity="no", internet="partial", secure_storage="no", trained_staff="unknown",
                       road_access="partial", parent_association="yes"),
                  [("water", "Borehole with hand pump", "1 borehole", "critical"),
-                  ("sanitation_latrines", "Separate latrines for girls", "6 latrines", "high")])),
-        ("whatsapp:+237600000012", "Mrs Tchoupo (GBHS Bafoussam)", "We want a computer lab for our 820 students. We have power and a room with a lock.",
-         _school("GBHS Bafoussam-Ville (fictional)", "Bafoussam", "West", 820, 410,
+                  ("sanitation_latrines", "Separate latrines for girls", "6 latrines", "high")],
+                 vulnerable={"conflict_affected": "yes", "displaced_pupils": 85, "orphans": 20})),
+        ("whatsapp:+237600000012", "Mrs Tchoupo (Collège Lumière)", "We want a computer lab for our 820 students. We have power and a room with a lock.",
+         _school("Collège Lumière Bafoussam", "Bafoussam", "West", 820, 410,
                  dict(learning_space="partial", water_toilets="ok", teachers="partial", materials_results="partial",
                       barriers="ok", health_wellbeing="ok", technology="critical", safety_operation="ok"),
                  full, [("devices", "Laptops for a computer lab", "40 laptops", "high"),
                         ("teacher_training", "ICT training for teachers", "6 teachers", "medium")], lang="English")),
-        ("whatsapp:+237600000013", "M. Mvondo (EP Nkoemvone)", "Il nous manque 30 table-bancs.",
-         _school("EP Nkoemvone (fictional)", "Ebolowa", "South", 180, 95,
+        ("whatsapp:+237600000013", "M. Mvondo (EP Les Manguiers)", "Il nous manque 30 table-bancs.",
+         _school("EP Les Manguiers", "Ebolowa", "South", 180, 95,
                  dict(learning_space="partial", water_toilets="ok", teachers="ok", materials_results="partial",
                       barriers="ok", health_wellbeing="ok", technology="unknown", safety_operation="ok"),
                  dict(full, internet="partial", secure_storage="partial"),
                  [("furniture", "Table-benches", "30 table-benches", "medium")])),
-        ("whatsapp:+237600000014", "M. Oumarou (EP Kousseri)", "L'école est fermée depuis les attaques.",
-         _school("EP Kousseri-Centre (fictional)", "Kousseri", "Far North", 400, 150,
+        ("whatsapp:+237600000014", "M. Oumarou (EP Espoir)", "L'école est fermée depuis les attaques.",
+         _school("EP Espoir de Kousseri", "Kousseri", "Far North", 400, 150,
                  dict(learning_space="critical", water_toilets="critical", teachers="critical", materials_results="critical",
                       barriers="critical", health_wellbeing="partial", technology="unknown", safety_operation="critical"),
                  dict(electricity="no", internet="no", secure_storage="no", trained_staff="no", road_access="no",
                       parent_association="partial"),
-                 [("classrooms_building", "Repair 4 classrooms", "4 classrooms", "high")], status="closed", safe="no")),
-        ("whatsapp:+237600000015", "Mr Ebai (CETIC Buea)", "Our ICT room has solar but only 5 old computers for 450 students.",
-         _school("CETIC de Buea (fictional)", "Buea", "Southwest", 450, 200,
+                 [("classrooms_building", "Repair 4 classrooms", "4 classrooms", "high")], status="closed", safe="no",
+                 vulnerable={"conflict_affected": "yes"})),
+        ("whatsapp:+237600000015", "Mr Ebai (Horizon Tech College)", "Our ICT room has solar but only 5 old computers for 450 students.",
+         _school("Horizon Tech College Buea", "Buea", "Southwest", 450, 200,
                  dict(learning_space="ok", water_toilets="partial", teachers="partial", materials_results="partial",
                       barriers="partial", health_wellbeing="ok", technology="critical", safety_operation="ok"),
                  dict(electricity="partial", internet="partial", secure_storage="yes", trained_staff="yes",
                       road_access="yes", parent_association="yes"),
                  [("devices", "Laptops for the ICT room", "20 laptops", "high")], lang="English")),
-        ("whatsapp:+237600000016", "Mme Ngono (EP Bertoua-Gare)", "Nous avons besoin de livres. 45 élèves n'ont pas d'acte de naissance.",
-         _school("EP Bertoua-Gare (fictional)", "Bertoua", "East", 300, 140,
+        ("whatsapp:+237600000016", "Mme Ngono (EP Arc-en-Ciel Bertoua)", "Nous avons besoin de livres. 45 élèves n'ont pas d'acte de naissance.",
+         _school("EP Arc-en-Ciel Bertoua", "Bertoua", "East", 300, 140,
                  dict(learning_space="partial", water_toilets="partial", teachers="partial", materials_results="critical",
                       barriers="critical", health_wellbeing="partial", technology="unknown", safety_operation="ok"),
                  dict(electricity="partial", internet="partial", secure_storage="no", trained_staff="no",
                       road_access="partial", parent_association="no"),
                  [("learning_materials", "Reading and maths textbooks", "300 textbooks", "high"),
-                  ("birth_registration", "Birth certificates for pupils", "45 pupils", "high")])),
+                  ("birth_registration", "Birth certificates for pupils", "45 pupils", "high")],
+                 vulnerable={"displaced_pupils": 40, "pupils_with_disability": 6, "note": "Refugee families from the CAR border area"})),
     ]
     ids = {}
     for n, (addr, name, msg, draft) in enumerate(S):
         ids[addr] = quick_case(addr, name, msg, draft, f"2026-10-1{n % 7}T09:00:00+00:00")
 
     P = [
-        ("whatsapp:+16475550101", "Cameroon Tech Diaspora Toronto (fictional)",
+        ("whatsapp:+16475550101", "Maple Laptop Circle Toronto",
          "We collected 25 refurbished laptops in Toronto for a school in Cameroon.",
-         _partner("Cameroon Tech Diaspora Toronto (fictional)", "diaspora_group", ["goods"], ["National"],
+         _partner("Maple Laptop Circle Toronto", "diaspora_group", ["goods"], ["National"],
                   [("devices", "Refurbished laptops", "25 laptops", "Photos of the lab when installed", "Toronto, Canada", True)],
                   "25 refurbished laptops collected in Toronto, for any school with power and a secure room.")),
-        ("whatsapp:+237600000021", "TechAid Yaoundé (fictional)", "Nous avons 20 ordinateurs portables reconditionnés à Yaoundé.",
-         _partner("TechAid Yaoundé (fictional)", "ngo", ["goods", "expertise"], ["National"],
+        ("whatsapp:+237600000021", "Atelier Numérique Yaoundé", "Nous avons 20 ordinateurs portables reconditionnés à Yaoundé.",
+         _partner("Atelier Numérique Yaoundé", "ngo", ["goods", "expertise"], ["National"],
                   [("devices", "Reconditioned laptops", "20 laptops", None, "Yaoundé", False),
                    ("teacher_training", "2-day ICT training for teachers", "1 session", None, "Yaoundé", False)],
                   "20 reconditioned laptops and ICT training for teachers, anywhere in Cameroon.", org_type="ngo",
                   registered="yes", lang="French")),
-        ("whatsapp:+237600000022", "Douala Freight & Customs (fictional)", "We clear and deliver shipments from Douala port.",
-         _partner("Douala Freight & Customs (fictional)", "company", ["transport"], ["National"],
+        ("whatsapp:+237600000022", "Wouri Freight & Transit", "We clear and deliver shipments from Douala port.",
+         _partner("Wouri Freight & Transit", "company", ["transport"], ["National"],
                   [("transport", "Customs clearance and delivery from Douala port", None, None, "Douala", False)],
                   "Clears shipments at Douala port and delivers to any region.", org_type="supplier", registered="yes")),
-        ("whatsapp:+237600000023", "Menuiserie Ebolowa (fictional)", "Nous fabriquons des table-bancs. Capacité 40 par mois.",
-         _partner("Menuiserie Ebolowa (fictional)", "company", ["goods", "services"], ["South", "Centre"],
+        ("whatsapp:+237600000023", "Menuiserie Bois d'Or", "Nous fabriquons des table-bancs. Capacité 40 par mois.",
+         _partner("Menuiserie Bois d'Or", "company", ["goods", "services"], ["South", "Centre"],
                   [("furniture", "Table-benches made to order", "40 table-benches", "South and Centre only", "Ebolowa", False)],
                   "Makes table-benches, about 40 a month, for the South and Centre regions.", org_type="supplier",
                   lang="French")),
-        ("whatsapp:+237600000024", "Rotary Club Bafoussam (fictional)", "Our club can give 3,000,000 FCFA for a school project in the West.",
-         _partner("Rotary Club Bafoussam (fictional)", "ngo", ["money"], ["West"],
+        ("whatsapp:+237600000024", "Club Solidarité Bafoussam", "Our club can give 3,000,000 FCFA for a school project in the West.",
+         _partner("Club Solidarité Bafoussam", "ngo", ["money"], ["West"],
                   [("funding", "Grant for a school project", "3,000,000 FCFA", "Report with photos", "Bafoussam", False)],
                   "A 3,000,000 FCFA grant for one school project in the West region.", registered="yes",
                   amount="3,000,000 FCFA", conditions="Report with photos")),
-        ("whatsapp:+33600000026", "Amis de Buea à Paris (fictional)",
+        ("whatsapp:+33600000026", "Amis de Buea à Paris",
          "Notre association à Paris a 15 ordinateurs portables pour une école anglophone.",
-         _partner("Amis de Buea à Paris (fictional)", "diaspora_group", ["goods"], ["Southwest", "Northwest"],
+         _partner("Amis de Buea à Paris", "diaspora_group", ["goods"], ["Southwest", "Northwest"],
                   [("devices", "Donated laptops", "15 laptops", "Southwest or Northwest only", "Paris, France", True)],
                   "15 laptops collected in Paris for a school in the Southwest or Northwest.", lang="French")),
-        ("whatsapp:+237600000025", "Aqua Nord Forages (fictional)", "Nous faisons des forages dans le Nord et l'Extrême-Nord.",
-         _partner("Aqua Nord Forages (fictional)", "company", ["services"], ["North", "Far North"],
+        ("whatsapp:+237600000025", "Aqua Nord Forages", "Nous faisons des forages dans le Nord et l'Extrême-Nord.",
+         _partner("Aqua Nord Forages", "company", ["services"], ["North", "Far North"],
                   [("water", "Borehole drilling with hand pump", "2 boreholes", None, "Garoua", False)],
                   "Drills boreholes with hand pumps in the North and Far North.", org_type="contractor",
                   registered="yes", lang="French")),
@@ -323,12 +338,28 @@ def load_part_two(bambui_thread: int, buildright_thread: int) -> None:
     for n, (addr, name, msg, draft) in enumerate(P):
         partner_threads[name] = quick_case(addr, name, msg, draft, f"2026-10-0{n + 1}T10:00:00+00:00")
     donors = {d["name"]: d for d in db.list_donors()}
-    for name in ("Douala Freight & Customs (fictional)", "Aqua Nord Forages (fictional)", "TechAid Yaoundé (fictional)"):
+    for name in ("Wouri Freight & Transit", "Aqua Nord Forages", "Atelier Numérique Yaoundé"):
         db.set_donor(donors[name]["id"], verified=1, verified_by="demo")
 
+    # A new request waiting for review: a head teacher's voice note (transcribed), not approved yet.
+    quick_case("whatsapp:+237600000018", "Mme Bih (EP Source de Vie)",
+               "Note vocale (transcription) : Bonjour PS43, je suis Mme Bih, directrice de l'EP Source de Vie à Kumbo. "
+               "Nous avons 380 élèves dont 190 filles et 6 enseignants, dont 2 payés par les parents. Il n'y a pas d'eau "
+               "à l'école, les enfants vont à la rivière. Le toit d'une salle est tombé pendant la pluie. "
+               "Nous avons l'électricité ENEO mais avec des coupures. La route est mauvaise en saison des pluies.",
+               _school("EP Source de Vie", "Kumbo", "Northwest", 380, 190,
+                       dict(learning_space="critical", water_toilets="critical", teachers="partial",
+                            materials_results="unknown", barriers="unknown", health_wellbeing="unknown",
+                            technology="unknown", safety_operation="partial"),
+                       dict(electricity="partial", internet="unknown", secure_storage="unknown",
+                            trained_staff="unknown", road_access="partial", parent_association="unknown"),
+                       [("water", "Water point at the school (children fetch water from the river)", "1 water point", "critical"),
+                        ("roofing", "Rebuild the roof of one classroom that collapsed in the rain", "1 classroom", "critical")]),
+               "2026-10-17T08:30:00+00:00", approve=False)
+
     # A past project: Aqua Nord drilled a borehole and built latrines at a school in Garoua (both confirmed).
-    past = quick_case("whatsapp:+237600000017", "M. Bello (EP Garoua-Plateau)", "Merci, le forage fonctionne.",
-                      _school("EP Garoua-Plateau (fictional)", "Garoua", "North", 520, 250,
+    past = quick_case("whatsapp:+237600000017", "M. Bello (EP Baobab de Garoua)", "Merci, le forage fonctionne.",
+                      _school("EP Baobab de Garoua", "Garoua", "North", 520, 250,
                               dict(learning_space="partial", water_toilets="ok", teachers="partial",
                                    materials_results="partial", barriers="ok", health_wellbeing="ok",
                                    technology="unknown", safety_operation="ok"),
@@ -336,7 +367,7 @@ def load_part_two(bambui_thread: int, buildright_thread: int) -> None:
                               [("water", "Borehole with hand pump", "1 borehole", "critical"),
                                ("sanitation_latrines", "Latrines for girls and boys", "4 latrines", "high")]),
                       "2026-07-01T09:00:00+00:00")
-    aqua = donors["Aqua Nord Forages (fictional)"]["id"]
+    aqua = donors["Aqua Nord Forages"]["id"]
     long_ago = datetime.now(timezone.utc) - timedelta(days=35)
     for k in db.list_tickets(thread_id=past):
         workflow.assign(k["id"], aqua, None, None, "demo")
@@ -352,8 +383,8 @@ def load_part_two(bambui_thread: int, buildright_thread: int) -> None:
         workflow.assign(lab["id"], p["donor_id"], p["item_id"], p["covers"], "demo")
     steps = db.list_steps(lab["id"])
     workflow.step_done(lab["id"], steps[0]["id"], "demo")
-    db.add_event(lab["id"], "message", "Message to partner to Cameroon Tech Diaspora Toronto (WhatsApp): PS43: Hello, a school "
-                 "needs your laptops: GBHS Bafoussam-Ville (West) - 40 laptops. Could you confirm when you can ship?", "demo")
+    db.add_event(lab["id"], "message", "Message to partner to Maple Laptop Circle Toronto (WhatsApp): PS43: Hello, a school "
+                 "needs your laptops: Collège Lumière Bafoussam (West) - 40 laptops. Could you confirm when you can ship?", "demo")
     db.add_event(lab["id"], "note", "Call with the principal: room has bars on windows and a steel door. Photos received.", "demo")
 
     # Roofing at Bambui: BuildRight is the partner; two quotes, one inflated.
@@ -364,14 +395,15 @@ def load_part_two(bambui_thread: int, buildright_thread: int) -> None:
         workflow.assign(roof["id"], build["id"], sheets["id"], 120, "demo")
         workflow.add_quote(roof["id"], 1_800_000, "demo", donor_id=build["id"], quantity=120, unit="sheets",
                            note="Aluminium sheets, nails and labour")
-        workflow.add_quote(roof["id"], 2_640_000, "demo", supplier_name="Quincaillerie du Marché (fictional)",
+        workflow.add_quote(roof["id"], 2_640_000, "demo", supplier_name="Quincaillerie du Marché",
                            quantity=120, unit="sheets", note="Same sheets, transport included")
-        workflow.add_quote(roof["id"], 1_920_000, "demo", supplier_name="Bamenda Hardware (fictional)",
+        workflow.add_quote(roof["id"], 1_920_000, "demo", supplier_name="Bamenda Hardware",
                            quantity=120, unit="sheets", note="Sheets and nails, no labour")
 
 
 def main() -> None:
     db.init_db()
+    db.set_setting("demo_data", True)  # shows the "Demo data: all made up" banner on staff screens
     a = load("whatsapp:+237600000001", "Mr. Fon (Principal)", "whatsapp", SCHOOL, SCHOOL_DRAFT)
     b = load("whatsapp:+237600000002", "Ngwa (BuildRight Bamenda)", "whatsapp", PARTNER, PARTNER_DRAFT)
     print(f"Demo threads ready: /threads/{a} (school need) and /threads/{b} (partner offer)")

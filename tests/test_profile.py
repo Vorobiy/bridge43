@@ -113,7 +113,7 @@ def test_follow_up_asks_only_whats_missing_in_french():
     assert f["asking"] == [5, 6, 14] and f["language"] == "fr"
     assert f["message"].startswith("PS43 : Merci") and "ces 3 questions" in f["message"]
     assert "salles de classe" in f["message"] and "eau potable" not in f["message"]
-    assert f["complete"] == round(100 * 6 / 14)
+    assert f["complete"] == round(100 * 6 / 15)
     assert len(f["message"]) < 600
 
 
@@ -122,6 +122,7 @@ def test_follow_up_english_single_question_and_complete_profile():
     d["numbers"].update(classrooms=6, teachers=8, parent_paid_teachers=3, without_birth_certificate=40)
     d["profile"]["learning_space"]["status"] = "partial"
     d["location"].update(latitude=10.7, longitude=13.8)
+    d["vulnerability"]["orphans"] = 0
     for k in ("electricity", "internet", "road_access"):
         d["readiness"][k]["status"] = "no"
     f = gaps.follow_up(d, "self_reported")

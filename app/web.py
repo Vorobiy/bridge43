@@ -15,6 +15,7 @@ from . import db, gaps, media
 from .channels import staff_intake, twilio
 from .config import settings
 from .processing import pipeline
+from .scoring import AREA_LABELS
 from .summary import NEED_CATEGORIES, PROFILE_AREAS, PROFILE_KEYS, READINESS_KEYS, normalize, summarize_thread
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -37,7 +38,19 @@ router = APIRouter(dependencies=[Depends(staff)])
 
 
 def _ctx(request: Request, **kw) -> dict:
-    return {"request": request, "settings": settings, "open_mode": not settings.staff_password, **kw}
+    return {"request": request, "settings": settings, "open_mode": not settings.staff_password,
+            "demo_data": bool(db.get_setting("demo_data", False)), **kw}
+
+
+def _priority(summary: dict | None) -> dict | None:
+    """Matrix box and plain-language reason for an approved school case."""
+    from . import gaps, scoring
+    if not summary:
+        return None
+    approved = db.latest_approved_summary(summary["thread_id"])
+    if not approved or gaps.bank_for(approved["data"]) != "school":
+        return None
+    return scoring.score_case(approved["data"])
 
 
 def _meta(item: dict) -> dict:
@@ -114,6 +127,9 @@ def thread_page(request: Request, thread_id: int, msg: str | None = None, error:
     for it in items:
         it["meta"] = _meta(it)
     summary = db.latest_summary(thread_id)
+    from . import workflow
+    case_tickets = db.list_tickets(thread_id=thread_id)
+    partner = db.donor_for_contact(contact["id"])
     in_flight = sum(1 for i in items if i["status"] in ("received", "processing", "awaiting_media"))
     new_since = []
     if summary:
@@ -127,7 +143,9 @@ def thread_page(request: Request, thread_id: int, msg: str | None = None, error:
         twilio_enabled=settings.twilio_enabled, can_message=db.is_messageable(contact.get("reply_to") or contact["address"]),
         reply_to=contact.get("reply_to") or contact["address"], channels=sorted({i["channel"] for i in items}),
         other_cases=[t for t in db.list_threads() if t["id"] != thread_id],
-        case_tickets=db.list_tickets(thread_id=thread_id), partner=db.donor_for_contact(contact["id"])))
+        case_tickets=case_tickets, partner=partner, priority=_priority(summary), area_labels=AREA_LABELS,
+        stage=workflow.case_stage(thread, case_tickets) if not partner else None,
+        next=workflow.case_next_step(thread, summary, case_tickets, partner)))
 
 
 def _back(thread_id: int, **q: str) -> RedirectResponse:

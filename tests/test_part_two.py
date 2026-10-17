@@ -278,7 +278,7 @@ def test_demo_data_loads_and_renders(client):
     assert {"none", "related", "single", "combined", "covered"} <= kinds
     assert workflow.followups_due()  # the Garoua borehole 30-day check
     trust = {d["name"]: v["level"] for d in db.list_donors() for k, v in workflow.trust_map().items() if k == d["id"]}
-    assert trust["Aqua Nord Forages (fictional)"] == "Trusted"
+    assert trust["Aqua Nord Forages"] == "Trusted"
     for url in ("/dashboard", "/tickets", "/partners", "/matches"):
         assert client.get(url).status_code == 200
     for k in db.list_tickets():

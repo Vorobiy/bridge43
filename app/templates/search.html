@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Search{% endblock %}
+{% block body %}
+<h1 style="margin-bottom:4px">Search</h1>
+<form method="get" action="/search" class="row" style="margin-bottom:12px">
+  <div style="flex:3"><input type="text" name="q" value="{{ r.q }}" placeholder="School, town, partner, case number, need…" autofocus></div>
+  <div style="flex:0 0 auto"><button class="primary" type="submit">{{ ui.icon("search") }} Search</button></div>
+</form>
+{% if r.q|length < 2 %}<p class="muted">Type at least 2 letters.</p>{% else %}
+<div class="grid2">
+  <div class="panel">
+    <h2 style="margin-top:0">{{ ui.icon("inbox") }} Cases ({{ r.cases|length }})</h2>
+    {% for t in r.cases %}<div style="padding:6px 0; border-bottom:1px solid var(--line)"><a href="/threads/{{ t.id }}"><strong>{{ t.title or t.display_name or t.address }}</strong></a>
+      <div class="small muted">{{ t.case_number }} · {{ t.display_name or t.address }} · {{ t.status.replace("_", " ") }}</div></div>
+    {% else %}<p class="muted small">No case.</p>{% endfor %}
+  </div>
+  <div>
+    <div class="panel">
+      <h2 style="margin-top:0">{{ ui.icon("needs") }} Needs ({{ r.needs|length }})</h2>
+      {% for k in r.needs %}<div style="padding:6px 0; border-bottom:1px solid var(--line)"><a href="/tickets/{{ k.id }}"><strong>{{ k.description }}</strong></a>
+        <div class="small muted">{{ k.school }} · {{ status_labels[k.status] }}</div></div>
+      {% else %}<p class="muted small">No need.</p>{% endfor %}
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <h2 style="margin-top:0">{{ ui.icon("partners") }} Partners ({{ r.partners|length }})</h2>
+      {% for p in r.partners %}<div style="padding:6px 0; border-bottom:1px solid var(--line)"><a href="/partners/{{ p.id }}"><strong>{{ p.name }}</strong></a>
+        <div class="small muted">{{ p.regions|join(", ") }}</div></div>
+      {% else %}<p class="muted small">No partner.</p>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -71,6 +71,8 @@ class Settings:
     twilio_auth_token: str = field(default_factory=lambda: os.getenv("TWILIO_AUTH_TOKEN", ""))
     twilio_whatsapp_from: str = field(default_factory=lambda: os.getenv("TWILIO_WHATSAPP_FROM", ""))  # e.g. whatsapp:+14155238886
     twilio_sms_from: str = field(default_factory=lambda: os.getenv("TWILIO_SMS_FROM", ""))  # e.g. +1555...
+    # The WhatsApp number shown on the public sign-up page (defaults to TWILIO_WHATSAPP_FROM), e.g. +237 6...
+    public_whatsapp: str = field(default_factory=lambda: os.getenv("PUBLIC_WHATSAPP", ""))
     validate_twilio_signature: bool = field(default_factory=lambda: _bool("VALIDATE_TWILIO_SIGNATURE", True))
     # If set, inbound calls are forwarded to this staff phone and the conversation is recorded.
     # If empty, callers leave a recorded message instead.
