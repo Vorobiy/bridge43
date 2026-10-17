@@ -350,3 +350,13 @@ def test_new_message_updates_an_approved_case(client, fakes):
     assert db.get_thread(case["id"])["case_number"] == case["case_number"]
     page = client.get(f"/threads/{case['id']}").text
     assert "Updated from new messages" in page and "Adds 30 broken benches" in page
+
+
+def test_hosted_requires_password_and_uses_railway_domain(client, monkeypatch):
+    monkeypatch.setattr(settings, "hosted", True)
+    assert client.get("/").status_code == 503
+    assert client.post("/webhooks/twilio/messaging", data={"From": "+237670000050", "Body": "x", "MessageSid": "H1"}).status_code == 200
+    monkeypatch.setenv("RAILWAY_PUBLIC_DOMAIN", "bridge43-production.up.railway.app")
+    monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
+    from app.config import Settings
+    assert Settings().public_base_url == "https://bridge43-production.up.railway.app"

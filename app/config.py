@@ -31,7 +31,12 @@ class Settings:
     data_dir: Path = field(default_factory=lambda: Path(os.getenv("DATA_DIR", "data")))
 
     # Public URL of this server (used to build Twilio callback URLs and verify signatures)
-    public_base_url: str = field(default_factory=lambda: os.getenv("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/"))
+    public_base_url: str = field(default_factory=lambda: (
+        os.getenv("PUBLIC_BASE_URL")
+        or (f"https://{os.environ['RAILWAY_PUBLIC_DOMAIN']}" if os.getenv("RAILWAY_PUBLIC_DOMAIN") else "")
+        or "http://localhost:8000").rstrip("/"))
+    # True when running on a cloud host: the staff screens then refuse to run without a password
+    hosted: bool = field(default_factory=lambda: bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("BRIDGE43_HOSTED")))
 
     # Staff login for the review screen (HTTP Basic)
     staff_username: str = field(default_factory=lambda: os.getenv("STAFF_USERNAME", "ps43"))

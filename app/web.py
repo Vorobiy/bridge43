@@ -23,6 +23,8 @@ _basic = HTTPBasic(auto_error=False)
 
 def staff(credentials: HTTPBasicCredentials | None = Depends(_basic)) -> str:
     if not settings.staff_password:
+        if settings.hosted:
+            raise HTTPException(503, "Set STAFF_PASSWORD in the hosting variables before using the inbox online.")
         return "staff"  # open in local development; set STAFF_PASSWORD before going online
     ok = credentials is not None and secrets.compare_digest(credentials.username, settings.staff_username) \
         and secrets.compare_digest(credentials.password, settings.staff_password)
