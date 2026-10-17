@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -36,6 +37,10 @@ def config_problems() -> list[str]:
         problems.append("ffmpeg not found: audio and video cannot be processed")
     if not settings.staff_password:
         problems.append("STAFF_PASSWORD not set: the staff screens are open to anyone who can reach this server")
+    if settings.hosted and not os.getenv("RAILWAY_VOLUME_MOUNT_PATH"):
+        problems.append("no persistent volume attached: cases are lost on every redeploy (Railway: Attach Volume at /data)")
+    if "localhost" in settings.public_base_url and settings.hosted:
+        problems.append("PUBLIC_BASE_URL points to localhost: Twilio cannot reach this server")
     if not settings.twilio_enabled:
         problems.append("Twilio not configured: live WhatsApp/SMS/calls and confirmations are off (uploads still work)")
     return problems
@@ -50,4 +55,4 @@ app.include_router(web.router)
 
 @app.get("/health", include_in_schema=False)
 def health() -> dict:
-    return {"ok": True, "warnings": config_problems()}
+    return {"ok": True, "public_url": settings.public_base_url, "warnings": config_problems()}

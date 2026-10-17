@@ -360,3 +360,16 @@ def test_hosted_requires_password_and_uses_railway_domain(client, monkeypatch):
     monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
     from app.config import Settings
     assert Settings().public_base_url == "https://bridge43-production.up.railway.app"
+
+
+def test_railway_overrides_bad_values(monkeypatch):
+    from app.config import Settings
+    monkeypatch.setenv("RAILWAY_PUBLIC_DOMAIN", "bridge43-production.up.railway.app")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "http://localhost:8000")
+    monkeypatch.setenv("RAILWAY_VOLUME_MOUNT_PATH", "/data")
+    monkeypatch.setenv("DATA_DIR", "data")
+    s = Settings()
+    assert s.public_base_url == "https://bridge43-production.up.railway.app"
+    assert str(s.data_dir) == "/data"
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://custom.example.org/")
+    assert Settings().public_base_url == "https://custom.example.org"

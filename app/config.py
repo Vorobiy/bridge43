@@ -25,16 +25,24 @@ def _int(name: str, default: int) -> int:
     return int(raw) if raw else default
 
 
+def _public_base_url() -> str:
+    """The address Twilio calls. On Railway its own domain wins over a leftover localhost value."""
+    explicit = (os.getenv("PUBLIC_BASE_URL") or "").strip()
+    railway = os.getenv("RAILWAY_PUBLIC_DOMAIN")
+    if railway and (not explicit or "localhost" in explicit or "127.0.0.1" in explicit):
+        return f"https://{railway}"
+    return (explicit or "http://localhost:8000").rstrip("/")
+
+
 @dataclass
 class Settings:
     # Storage
-    data_dir: Path = field(default_factory=lambda: Path(os.getenv("DATA_DIR", "data")))
+    # On Railway, a mounted volume always wins, so cases survive redeploys whatever DATA_DIR says
+    data_dir: Path = field(default_factory=lambda: Path(
+        os.getenv("RAILWAY_VOLUME_MOUNT_PATH") or os.getenv("DATA_DIR") or "data"))
 
     # Public URL of this server (used to build Twilio callback URLs and verify signatures)
-    public_base_url: str = field(default_factory=lambda: (
-        os.getenv("PUBLIC_BASE_URL")
-        or (f"https://{os.environ['RAILWAY_PUBLIC_DOMAIN']}" if os.getenv("RAILWAY_PUBLIC_DOMAIN") else "")
-        or "http://localhost:8000").rstrip("/"))
+    public_base_url: str = field(default_factory=lambda: _public_base_url())
     # True when running on a cloud host: the staff screens then refuse to run without a password
     hosted: bool = field(default_factory=lambda: bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("BRIDGE43_HOSTED")))
 
