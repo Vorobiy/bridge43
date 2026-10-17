@@ -35,6 +35,26 @@ internet, storage, road access, trained staff, space), numbers, people as named,
 open questions, safety flags, and a confirmation message in the contact's own language. Every fact
 cites the source items (`I12`), which link to the original message, photo or call on the review screen.
 
+**School profile:** every school draft also rates the same 8 areas, so schools can be compared and scored:
+safety and operation, learning space, water and toilets, teachers, materials and results, barriers for
+children (fees, birth certificates, girls, disability), health and wellbeing (meals), and technology. Each is
+`ok`, `partial`, `critical` or `unknown` with citations. `unknown` means "not discussed", so a school that
+never mentioned water is not mistaken for one with water. The draft also records whether the school is open and
+safe to reach, girls enrolled, teachers paid by parents, pupils without a birth certificate, and whether there is
+an active parents' association.
+
+**Location:** a WhatsApp location pin (Twilio `Latitude`/`Longitude`) is saved as a "Shared location" item and
+becomes the case's map point, cited like any other fact. Map links and KoBo GPS fields work too.
+
+**Trust level:** worked out from the evidence, not by the AI: *self-reported* (messages and calls only),
+*photo-backed* (the contact sent a photo or video), *visit-confirmed* (a KoBo field visit form is in the case).
+
+**Follow-up questions:** after each draft, Bridge43 checks 14 short profile questions (French and English) and
+proposes a WhatsApp message with only the unanswered ones, at most 3 at a time, most important first (open and
+safe, then name and place, biggest need, pupils, water, toilets...). Staff check and send it from the review
+screen; the answers come back into the case and the next draft fills the profile. Partners, donors and
+unrelated chats get no profile questions. The question bank is in `app/gaps.py`.
+
 **One case per contact:** every contact gets a case number (`PS43-2026-0001`) as soon as they first
 get in touch. Everything they send afterwards, on any channel (WhatsApp texts, voice notes, photos, videos,
 SMS, calls through Twilio or the Mac call recorder, KoBo forms, staff notes), is filed in that same case.
@@ -45,7 +65,9 @@ record (keeping staff edits), says what changed, and sends the case back to "nee
 numbers. Search the inbox by case number, name or phone.
 
 **Human check:** staff edit, approve (creates case number `PS43-2026-0001`) or reject, and can send the
-confirmation message back on WhatsApp/SMS. Approved cases are available at `GET /api/cases` for the next stage.
+confirmation message back on WhatsApp/SMS. Approved cases are available at `GET /api/cases` for the next stage
+(priority matrix): each case comes with `trust`, `profile_complete` (0-100) and `missing_topics`, plus the
+full record under `case` (profile, operating status, location, readiness, numbers, needs).
 
 **Policy and privacy:** official Twilio/Meta APIs only (no unofficial WhatsApp bots); consent notice on first
 contact and at the start of every call; `STOP`/`ARRET` deletes all of a contact's data; optional
@@ -112,7 +134,9 @@ app/
   processing/vision.py          Claude vision for photos, video frames, PDFs
   processing/ffmpeg.py          audio/video helpers
   recorder_api.py       upload endpoint for the Mac call recorder
-  summary.py            SNAP schema, prompt, citation checks
+  summary.py            SNAP schema + school profile, prompt, citation checks
+  gaps.py               the 14 follow-up questions and which are still unanswered
+  evidence.py           trust level and map location, worked out from the items
   web.py + templates/   inbox, intake forms, review screen, JSON API
 recorder/               Mac call recorder (Swift) - see recorder/README.md
 scripts/seed_demo.py    fictional demo data

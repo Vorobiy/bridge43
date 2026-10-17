@@ -18,13 +18,32 @@ log = logging.getLogger("bridge43.summary")
 NEED_CATEGORIES = [
     "classrooms_building", "roofing", "water", "sanitation_latrines", "furniture", "electricity",
     "connectivity", "devices", "learning_materials", "teacher_training", "staffing", "safety_security",
-    "fees_and_access", "other",
+    "fees_and_access", "birth_registration", "school_meals_health", "other",
 ]
-READINESS_KEYS = ["electricity", "internet", "secure_storage", "road_access", "trained_staff", "space"]
+READINESS_KEYS = ["electricity", "internet", "secure_storage", "road_access", "trained_staff", "space",
+                  "parent_association"]
+
+# The school profile: the same 8 areas for every school, so schools can be compared and scored fairly.
+# Unlike `needs` (only what is asked for), the profile also records what is fine ("ok"),
+# so "fine" and "never discussed" ("unknown") are not confused.
+PROFILE_AREAS = {
+    "safety_operation": "Safe building and site, school able to operate (no collapse risk, no insecurity closing it).",
+    "learning_space": "Enough usable classrooms, roof, walls, floors, desks and benches for the pupils.",
+    "water_toilets": "Drinking water every day on site, and working toilets/latrines (separate for girls).",
+    "teachers": "Enough teachers for the classes; whether some are unpaid or paid by parents.",
+    "materials_results": "Textbooks, notebooks, chalk/boards, and how pupils are doing in exams.",
+    "barriers": "What keeps children out: fees, missing birth certificates, girls dropping out, disability access, displacement.",
+    "health_wellbeing": "School meals, hunger, health or first aid, psychosocial support.",
+    "technology": "Devices, computers, phones or radio used for learning (power and signal are in readiness).",
+}
+PROFILE_KEYS = list(PROFILE_AREAS)
+PROFILE_LEVELS = ["ok", "partial", "critical", "unknown"]
+NUMBER_KEYS = ["students", "girls", "teachers", "parent_paid_teachers", "classrooms", "without_birth_certificate"]
 
 _cite = {"type": "array", "items": {"type": "integer"},
          "description": "Ids of the source items (the number after I in [I12]) that support this. Never empty for a stated fact."}
 _status = {"type": "string", "enum": ["yes", "partial", "no", "unknown"]}
+_int = {"type": ["integer", "null"]}
 
 CASE_TOOL = {
     "name": "record_case_draft",
@@ -32,7 +51,8 @@ CASE_TOOL = {
     "input_schema": {
         "type": "object",
         "additionalProperties": False,
-        "required": ["relevance", "relevance_reason", "what_changed", "case_type", "title", "organization", "situation", "needs", "offers", "assets",
+        "required": ["relevance", "relevance_reason", "what_changed", "case_type", "title", "organization", "location",
+                     "operating_status", "situation", "profile", "needs", "offers", "assets",
                      "readiness", "numbers", "people", "plan", "open_questions", "safety_flags",
                      "language", "confidence", "confirmation_message"],
         "properties": {
@@ -61,10 +81,45 @@ CASE_TOOL = {
                     "citations": _cite,
                 },
             },
+            "location": {
+                "type": "object", "additionalProperties": False,
+                "required": ["latitude", "longitude", "description", "citations"],
+                "description": "Where the site is. Coordinates only if a shared location, map link or GPS reading gives them.",
+                "properties": {
+                    "latitude": {"type": ["number", "null"]},
+                    "longitude": {"type": ["number", "null"]},
+                    "description": {"type": ["string", "null"], "description": "Landmarks or directions as stated, e.g. 'behind the Catholic mission'."},
+                    "citations": _cite,
+                },
+            },
+            "operating_status": {
+                "type": "object", "additionalProperties": False,
+                "required": ["status", "safe_to_reach", "note", "citations"],
+                "description": "Is the school running, and can pupils and PS43 reach it safely?",
+                "properties": {
+                    "status": {"type": "string", "enum": ["open", "partially_open", "closed", "unknown"]},
+                    "safe_to_reach": {"type": "string", "enum": ["yes", "risky", "no", "unknown"],
+                                      "description": "risky = open but the road or area is sometimes unsafe."},
+                    "note": {"type": ["string", "null"]},
+                    "citations": _cite,
+                },
+            },
             "situation": {
                 "type": "object", "additionalProperties": False, "required": ["text", "citations"],
                 "properties": {"text": {"type": "string", "description": "2-4 sentences: who they are and what is happening."},
                                "citations": _cite},
+            },
+            "profile": {
+                "type": "object", "additionalProperties": False, "required": PROFILE_KEYS,
+                "description": "The school's standing in 8 fixed areas. ok = the sources say it is fine; partial = works "
+                               "but not enough or not always; critical = missing, broken or dangerous; unknown = not "
+                               "discussed. Never guess 'ok' from silence. For partner/offer conversations leave all unknown.",
+                "properties": {k: {"type": "object", "additionalProperties": False,
+                                   "required": ["status", "note", "citations"],
+                                   "description": desc,
+                                   "properties": {"status": {"type": "string", "enum": PROFILE_LEVELS},
+                                                  "note": {"type": ["string", "null"]}, "citations": _cite}}
+                               for k, desc in PROFILE_AREAS.items()},
             },
             "needs": {"type": "array", "items": {
                 "type": "object", "additionalProperties": False,
@@ -101,9 +156,13 @@ CASE_TOOL = {
             },
             "numbers": {
                 "type": "object", "additionalProperties": False,
-                "required": ["students", "teachers", "classrooms", "citations"],
-                "properties": {"students": {"type": ["integer", "null"]}, "teachers": {"type": ["integer", "null"]},
-                               "classrooms": {"type": ["integer", "null"]}, "citations": _cite},
+                "required": [*NUMBER_KEYS, "citations"],
+                "properties": {"students": _int, "girls": {**_int, "description": "Girls enrolled, if stated."},
+                               "teachers": _int,
+                               "parent_paid_teachers": {**_int, "description": "Teachers paid by parents/PTA, not the state."},
+                               "classrooms": _int,
+                               "without_birth_certificate": {**_int, "description": "Pupils with no birth certificate (cannot sit official exams)."},
+                               "citations": _cite},
             },
             "people": {"type": "array", "description": "People named in the conversation, only as stated there.", "items": {
                 "type": "object", "additionalProperties": False, "required": ["name", "role", "organization", "citations"],
@@ -155,7 +214,14 @@ Rules:
 - People: record only names and roles as stated in the conversation. Do not speculate about anyone.
 - Write the draft in {settings.staff_language}; write confirmation_message in the contact's own language
   (French, English or simple English for Pidgin speakers).
-- Be concise and concrete: quantities, places, dates."""
+- Be concise and concrete: quantities, places, dates.
+- profile: rate each of the 8 areas from what the sources say. A stated problem is partial or critical; a stated
+  "we have it / it works" is ok; anything not discussed stays unknown. Every need you list should also show in
+  the matching profile area (e.g. a water need means water_toilets is partial or critical).
+- readiness.parent_association: "yes" if the school has an active parents' association (APEE/PTA) or school
+  management committee that can help receive, guard and maintain what is delivered.
+- location: copy coordinates only from a "Shared location" item, a map link or a GPS field; never estimate them.
+- operating_status: closed or unsafe schools must be flagged; also add a safety_flags entry when the area is unsafe."""
 
 CHANNEL_LABELS = {"whatsapp": "WhatsApp", "sms": "SMS", "call": "Phone/WhatsApp call", "kobo": "Field form (KoBo)",
                   "upload": "Uploaded", "agent": "Staff call notes"}
@@ -271,6 +337,7 @@ def summarize_thread(thread_id: int, manual: bool = False) -> dict | None:
     data = call_model(build_prompt(items, contact, previous))
     data = _clean_citations(data, {i["id"] for i in items})
     data = normalize(data)
+    data = enrich(data, items)
     summary = db.add_summary(thread_id, data, settings.summary_model, [i["id"] for i in items])
     db.set_thread(thread_id, title=data.get("title") or thread["title"])
     org = data.get("organization") or {}
@@ -280,6 +347,19 @@ def summarize_thread(thread_id: int, manual: bool = False) -> dict | None:
     if data.get("relevance") == "not_relevant" and not thread.get("relevance_locked"):
         db.set_thread(thread_id, status="not_relevant")
     return summary
+
+
+def enrich(data: dict, items: list[dict]) -> dict:
+    """Add the parts worked out by code, not the model: map location, trust level, follow-up questions.
+
+    Stored under keys starting with "_" so they are not fed back to the model as part of the record.
+    """
+    from . import evidence, gaps
+
+    evidence.fill_location(data, items)
+    data["_trust"] = evidence.trust_level(items)
+    data["_follow_up"] = gaps.follow_up(data, data["_trust"]["level"])
+    return data
 
 
 def normalize(data: dict) -> dict:
@@ -306,21 +386,29 @@ def normalize(data: dict) -> dict:
         data[key] = [{**defaults, **entry} for entry in data[key] if isinstance(entry, dict)]
     data["open_questions"] = [str(q) for q in data["open_questions"]]
     data["safety_flags"] = [str(q) for q in data["safety_flags"]]
-    for key, defaults in {"organization": {"name": None, "type": "unknown", "region": None, "town": None, "citations": []},
-                          "situation": {"text": "", "citations": []},
-                          "numbers": {"students": None, "teachers": None, "classrooms": None, "citations": []},
-                          "confirmation_message": {"language": "unknown", "text": ""}}.items():
-        if isinstance(data.get(key), dict):
-            data[key] = {**defaults, **data[key]}
-    readiness = data.get("readiness") if isinstance(data.get("readiness"), dict) else {}
-    for k in READINESS_KEYS:
-        r = readiness.get(k) if isinstance(readiness.get(k), dict) else {}
-        r.setdefault("status", "unknown")
-        r.setdefault("note", None)
-        r.setdefault("citations", [])
-        readiness[k] = r
-    data["readiness"] = readiness
-    data.setdefault("numbers", {"students": None, "teachers": None, "classrooms": None, "citations": []})
+    object_defaults = {
+        "organization": {"name": None, "type": "unknown", "region": None, "town": None, "citations": []},
+        "location": {"latitude": None, "longitude": None, "description": None, "citations": []},
+        "operating_status": {"status": "unknown", "safe_to_reach": "unknown", "note": None, "citations": []},
+        "situation": {"text": "", "citations": []},
+        "numbers": {**{k: None for k in NUMBER_KEYS}, "citations": []},
+        "confirmation_message": {"language": "unknown", "text": ""},
+    }
+    for key, defaults in object_defaults.items():
+        if key == "confirmation_message" and not isinstance(data.get(key), dict):
+            continue  # filled below once the language is known
+        data[key] = {**defaults, **(data[key] if isinstance(data.get(key), dict) else {})}
+    for group, keys, valid in (("readiness", READINESS_KEYS, ["yes", "partial", "no", "unknown"]),
+                               ("profile", PROFILE_KEYS, PROFILE_LEVELS)):
+        block = data.get(group) if isinstance(data.get(group), dict) else {}
+        for k in keys:
+            r = block.get(k) if isinstance(block.get(k), dict) else {}
+            if r.get("status") not in valid:
+                r["status"] = "unknown"
+            r.setdefault("note", None)
+            r.setdefault("citations", [])
+            block[k] = r
+        data[group] = block
     data.setdefault("language", "unknown")
     data.setdefault("confidence", "low")
     data.setdefault("confirmation_message", {"language": data["language"], "text": ""})

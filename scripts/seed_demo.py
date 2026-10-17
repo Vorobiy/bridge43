@@ -35,6 +35,19 @@ SCHOOL_DRAFT = {
     "situation": {"text": "Secondary school with 540 students and 14 teachers in 8 classrooms. The roof of 3 classrooms "
                           "leaks, so students in those rooms go home when it rains. The girls' latrines have been broken "
                           "for a year.", "citations": [1, 3, 4]},
+    "location": {"latitude": None, "longitude": None, "description": None, "citations": []},
+    "operating_status": {"status": "open", "safe_to_reach": "unknown", "note": "Open; safety of the area not discussed",
+                         "citations": [3]},
+    "profile": {
+        "safety_operation": {"status": "partial", "note": "Pupils in 3 classrooms go home when it rains", "citations": [3]},
+        "learning_space": {"status": "critical", "note": "3 of 8 classroom roofs leak; about 60 table-benches missing", "citations": [3, 4]},
+        "water_toilets": {"status": "critical", "note": "Girls' latrines broken for a year; water not discussed", "citations": [3]},
+        "teachers": {"status": "unknown", "note": "14 teachers; enough or not not discussed", "citations": [3]},
+        "materials_results": {"status": "unknown", "note": None, "citations": []},
+        "barriers": {"status": "unknown", "note": None, "citations": []},
+        "health_wellbeing": {"status": "unknown", "note": None, "citations": []},
+        "technology": {"status": "unknown", "note": "No electricity, so no devices in use", "citations": [5]},
+    },
     "needs": [
         {"category": "roofing", "description": "Repair or replace roof sheets on 3 classrooms; daylight visible through holes",
          "quantity": "3 classrooms", "urgency": "critical", "citations": [3, 4]},
@@ -53,6 +66,7 @@ SCHOOL_DRAFT = {
         "road_access": {"status": "unknown", "note": None, "citations": []},
         "trained_staff": {"status": "unknown", "note": None, "citations": []},
         "space": {"status": "yes", "note": "8 classrooms; 3 unusable in rain", "citations": [3]},
+        "parent_association": {"status": "yes", "note": "APEE can provide labour for the roofing", "citations": [5]},
     },
     "numbers": {"students": 540, "teachers": 14, "classrooms": 8, "citations": [3]},
     "people": [{"name": "M. Fon", "role": "Principal (proviseur)", "organization": "Lycée de Bambui-Colline", "citations": [1]}],
@@ -101,7 +115,7 @@ PARTNER_DRAFT = {
 
 
 def load(address: str, name: str, channel: str, messages: list, draft: dict) -> int:
-    from app.summary import normalize
+    from app.summary import enrich, normalize
 
     contact = db.get_or_create_contact(address, channel, name)
     db.set_consent(contact["id"], "notified")
@@ -127,7 +141,7 @@ def load(address: str, name: str, channel: str, messages: list, draft: dict) -> 
             return [fix(v) for v in o]
         return o
 
-    data = normalize(fix(draft))
+    data = enrich(normalize(fix(draft)), db.thread_items(thread["id"]))
     db.add_summary(thread["id"], data, "demo (hand-written)", ids)
     db.set_thread(thread["id"], title=data["title"])
     return thread["id"]

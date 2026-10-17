@@ -24,6 +24,10 @@
 .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
 .kv div { background: var(--bg); border-radius: 8px; padding: 8px 10px; }
 .kv strong { display: block; font-size: 20px; }
+.profile { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.profile > div { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.profile > div.p-critical { border-color: var(--bad); }
+.followup { white-space: pre-wrap; }
 </style>
 {% endblock %}
 {% block body %}
@@ -122,6 +126,9 @@
       <div style="flex:3">
         <span class="badge b-{{ d.case_type }}">{{ d.case_type }}</span>
         <span class="badge">confidence: {{ d.confidence }}</span>
+        {% if d._trust %}<span class="badge b-{{ d._trust.level }}" title="self-reported, then photo-backed, then visit-confirmed (KoBo field form)">{{ d._trust.label }}</span>{% endif %}
+        {% if d.operating_status and d.operating_status.status != "unknown" %}<span class="badge b-{{ d.operating_status.status }}">{{ d.operating_status.status.replace("_", " ") }}</span>{% endif %}
+        {% if d.operating_status and d.operating_status.safe_to_reach in ("risky", "no") %}<span class="badge b-high">{{ "unsafe to reach" if d.operating_status.safe_to_reach == "no" else "risky road" }}</span>{% endif %}
         <span class="badge b-{{ 'approved' if summary.status == 'approved' else ('rejected' if summary.status == 'rejected' else 'draft_ready') }}">
           {% if summary.status == "approved" %}approved{% elif summary.status == "rejected" %}rejected{% else %}AI draft v{{ summary.version }} · not yet reviewed{% endif %}</span>
       </div>
@@ -139,18 +146,31 @@
     <p class="muted small">{{ d.organization.name or "Organization not stated" }} · {{ d.organization.type }}
       {% if d.organization.town or d.organization.region %} · {{ [d.organization.town, d.organization.region]|select|join(", ") }}{% endif %}
       {{ cites(d.organization.citations) }} · language: {{ d.language }}
+      {% if d.location and d.location.latitude is not none %} · <a href="https://maps.google.com/?q={{ d.location.latitude }},{{ d.location.longitude }}" target="_blank" rel="noopener">map pin</a> {{ cites(d.location.citations) }}{% endif %}
+      {% if d.location and d.location.description %} · {{ d.location.description }}{% endif %}
       {% if d._edited_by %} · edited by {{ d._edited_by|join(", ") }}{% endif %}</p>
 
     {% if d.safety_flags %}<div class="flags"><strong>Handle with care:</strong><ul style="margin:4px 0 0 18px; padding:0">{% for f in d.safety_flags %}<li>{{ f }}</li>{% endfor %}</ul></div>{% endif %}
 
     <h3>Situation</h3>
     <p>{{ d.situation.text }} {{ cites(d.situation.citations) }}</p>
+    {% if d.operating_status and d.operating_status.note %}<p class="small">{{ d.operating_status.note }} {{ cites(d.operating_status.citations) }}</p>{% endif %}
 
-    {% if d.numbers.students or d.numbers.teachers or d.numbers.classrooms %}
-    <div class="kv">
-      {% if d.numbers.students %}<div><strong>{{ d.numbers.students }}</strong><span class="small muted">students</span></div>{% endif %}
-      {% if d.numbers.teachers %}<div><strong>{{ d.numbers.teachers }}</strong><span class="small muted">teachers</span></div>{% endif %}
-      {% if d.numbers.classrooms %}<div><strong>{{ d.numbers.classrooms }}</strong><span class="small muted">classrooms</span></div>{% endif %}
+    {% if d.profile %}
+    <h3>School profile{% if d._follow_up and d._follow_up.complete is not none %} <span class="small muted">· {{ d._follow_up.complete }}% complete</span>{% endif %}</h3>
+    <div class="profile">
+    {% for k in profile_keys %}{% set p = d.profile[k] %}
+      <div class="p-{{ p.status }}" title="{{ profile_areas[k] }}"><span class="small">{{ k.replace("_", " ") }}</span><br>
+        <span class="badge b-{{ p.status }}">{{ p.status }}</span>
+        {% if p.note %}<div class="small muted">{{ p.note }}</div>{% endif %}{{ cites(p.citations) }}</div>
+    {% endfor %}
+    </div>
+    {% endif %}
+
+    {% set number_labels = [("students", "students"), ("girls", "girls"), ("teachers", "teachers"), ("parent_paid_teachers", "paid by parents"), ("classrooms", "classrooms"), ("without_birth_certificate", "no birth certificate")] %}
+    {% if d.numbers.values()|select("number")|list %}
+    <div class="kv" style="margin-top:12px">
+      {% for key, label in number_labels %}{% if d.numbers[key] is number %}<div><strong>{{ d.numbers[key] }}</strong><span class="small muted">{{ label }}</span></div>{% endif %}{% endfor %}
     </div><p class="small muted">{{ cites(d.numbers.citations) }}</p>
     {% endif %}
 
@@ -241,6 +261,21 @@
     Available to the next stage at <a href="/api/threads/{{ thread.id }}">/api/threads/{{ thread.id }}</a>.</div>
   {% else %}
   <div class="flash err" style="margin-top:16px">Rejected by {{ summary.reviewer }}.{% if summary.review_notes %} Note: {{ summary.review_notes }}{% endif %}</div>
+  {% endif %}
+
+  {% if summary.status != "rejected" and d._follow_up and d._follow_up.message %}
+  <div class="panel" style="margin-top:16px">
+    <h2 style="margin-top:0">Ask for missing information</h2>
+    <p class="small muted">Still unknown: {{ d._follow_up.missing_topics|join(", ")|replace("_", " ") }}.
+      Only the {{ d._follow_up.asking|length }} most important go in one message. Answers land in this thread; rewrite the draft to fill the profile.</p>
+    <form method="post" action="/summaries/{{ summary.id }}/send-follow-up">
+      <textarea name="text" maxlength="1500" rows="7">{{ d._follow_up.message }}</textarea>
+      <p class="actions">
+        <button type="submit" {% if not (twilio_enabled and can_message) %}disabled{% endif %}>Send questions on {{ "WhatsApp" if reply_to.startswith("whatsapp:") else "SMS" }}</button>
+        {% if not twilio_enabled %}<span class="small muted">Twilio is not set up yet: copy the text and send it from your phone.</span>{% endif %}
+      </p>
+    </form>
+  </div>
   {% endif %}
 
   {% if summary.status != "rejected" %}

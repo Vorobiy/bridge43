@@ -11,11 +11,11 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
-from . import db, media
+from . import db, gaps, media
 from .channels import staff_intake, twilio
 from .config import settings
 from .processing import pipeline
-from .summary import NEED_CATEGORIES, READINESS_KEYS, normalize, summarize_thread
+from .summary import NEED_CATEGORIES, PROFILE_AREAS, PROFILE_KEYS, READINESS_KEYS, normalize, summarize_thread
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 _basic = HTTPBasic(auto_error=False)
@@ -122,6 +122,7 @@ def thread_page(request: Request, thread_id: int, msg: str | None = None, error:
     return templates.TemplateResponse(request, "thread.html", _ctx(
         request, thread=thread, contact=contact, items=items, summary=summary, in_flight=in_flight,
         new_since=new_since, msg=msg, error=error, need_categories=NEED_CATEGORIES, readiness_keys=READINESS_KEYS,
+        profile_keys=PROFILE_KEYS, profile_areas=PROFILE_AREAS,
         summary_json=json.dumps(summary["data"], indent=2, ensure_ascii=False) if summary else "",
         twilio_enabled=settings.twilio_enabled, can_message=db.is_messageable(contact.get("reply_to") or contact["address"]),
         reply_to=contact.get("reply_to") or contact["address"], channels=sorted({i["channel"] for i in items}),
@@ -177,6 +178,7 @@ def edit_summary(summary_id: int, title: str = Form(...), case_type: str = Form(
     d["situation"]["text"] = situation.strip()
     d["open_questions"] = [q.strip("-• ").strip() for q in open_questions.splitlines() if q.strip()]
     d["confirmation_message"]["text"] = confirmation_text.strip()
+    gaps.refresh(d)
     d.setdefault("_edited_by", [])
     if who not in d["_edited_by"]:
         d["_edited_by"].append(who)
@@ -196,7 +198,7 @@ def edit_summary_json(summary_id: int, data: str = Form(...), who: str = Depends
             raise ValueError("top level must be an object")
     except ValueError as exc:
         return _back(s["thread_id"], error=f"Not valid JSON: {exc}")
-    parsed = normalize(parsed)
+    parsed = gaps.refresh(normalize(parsed))
     parsed.setdefault("_edited_by", [])
     if who not in parsed["_edited_by"]:
         parsed["_edited_by"].append(who)
@@ -227,23 +229,43 @@ def reject(summary_id: int, notes: str = Form(""), who: str = Depends(staff)):
     return _back(s["thread_id"], msg="Rejected. New messages from this contact will open a new case.")
 
 
-@router.post("/summaries/{summary_id}/send-confirmation")
-async def send_confirmation(summary_id: int, text: str = Form(...), who: str = Depends(staff)):
+async def _send_to_contact(summary_id: int, text: str, who: str, label: str) -> tuple[dict, str | None]:
+    """Send a WhatsApp/SMS to the case contact and log it in the thread. Returns (thread, error)."""
     s = _summary_for(summary_id)
     thread = db.get_thread(s["thread_id"])
     contact = db.get_contact(thread["contact_id"])
     if contact["consent_status"] == "opted_out":
-        return _back(thread["id"], error="This contact opted out.")
+        return thread, "This contact opted out."
     try:
         sid = await run_in_threadpool(twilio.send_message, contact.get("reply_to") or contact["address"], text.strip())
     except twilio.SendError as exc:
-        return _back(thread["id"], error=f"Not sent: {exc}")
+        return thread, f"Not sent: {exc}"
     to = contact.get("reply_to") or contact["address"]
     db.add_item(contact_id=contact["id"], channel="whatsapp" if to.startswith("whatsapp:") else "sms",
-                kind="text", direction="out", author=who, body=f"[Confirmation sent] {text.strip()}",
+                kind="text", direction="out", author=who, body=f"[{label}] {text.strip()}",
                 external_id=sid or None, status="processed", thread_id=thread["id"])
+    return thread, None
+
+
+@router.post("/summaries/{summary_id}/send-confirmation")
+async def send_confirmation(summary_id: int, text: str = Form(...), who: str = Depends(staff)):
+    thread, error = await _send_to_contact(summary_id, text, who, "Confirmation sent")
+    if error:
+        return _back(thread["id"], error=error)
     db.update_summary(summary_id, confirmation_sent_at=db.now())
     return _back(thread["id"], msg="Confirmation sent. The contact's reply will appear in this thread.")
+
+
+@router.post("/summaries/{summary_id}/send-follow-up")
+async def send_follow_up(summary_id: int, text: str = Form(...), who: str = Depends(staff)):
+    """Ask the contact the missing profile questions. Their answers come back into this case and the next
+    draft fills the gaps (and drops those questions from the list)."""
+    if not text.strip():
+        return _back(_summary_for(summary_id)["thread_id"], error="Nothing to send.")
+    thread, error = await _send_to_contact(summary_id, text, who, "Follow-up questions sent")
+    if error:
+        return _back(thread["id"], error=error)
+    return _back(thread["id"], msg="Questions sent. Answers will appear in this thread and update the profile.")
 
 
 # ------------------------------------------------------------------ organising cases
@@ -334,6 +356,12 @@ def api_cases(status: str = "approved"):
     for t in db.list_threads():
         s = db.latest_summary(t["id"])
         if s and s["status"] == status:
+            d = s["data"]
+            follow = d.get("_follow_up") or {}
             out.append({"case_number": t["case_number"], "thread_id": t["id"], "contact": t["address"],
-                        "reviewed_by": s["reviewer"], "reviewed_at": s["reviewed_at"], "case": s["data"]})
+                        "reviewed_by": s["reviewer"], "reviewed_at": s["reviewed_at"],
+                        "trust": (d.get("_trust") or {}).get("level", "self_reported"),
+                        "profile_complete": follow.get("complete"),
+                        "missing_topics": follow.get("missing_topics", []),
+                        "case": d})
     return JSONResponse(out)

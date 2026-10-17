@@ -87,6 +87,21 @@ def fetch_media_then_process(item_id: int, url: str, filename_hint: str | None =
 
 # ------------------------------------------------------------------ messages (WhatsApp + SMS)
 
+def location_text(form: dict[str, str]) -> str | None:
+    """A WhatsApp location pin arrives as Latitude/Longitude (+ Label/Address) with an empty Body.
+    Turn it into one readable line the case draft can cite and the map can use."""
+    lat, lon = (form.get("Latitude") or "").strip(), (form.get("Longitude") or "").strip()
+    try:
+        flat, flon = float(lat), float(lon)
+    except ValueError:
+        return None
+    if not (-90 <= flat <= 90 and -180 <= flon <= 180):
+        return None
+    place = " - ".join(p.strip() for p in (form.get("Label"), form.get("Address")) if p and p.strip())
+    return (f"Shared location: {flat:.6f}, {flon:.6f}" + (f" ({place})" if place else "")
+            + f" https://maps.google.com/?q={flat:.6f},{flon:.6f}")
+
+
 @router.post("/messaging")
 async def inbound_message(request: Request) -> Response:
     form = await _verified_form(request)
@@ -98,6 +113,7 @@ async def inbound_message(request: Request) -> Response:
     body = (form.get("Body") or "").strip()
     num_media = int(form.get("NumMedia") or 0)
     sid = form.get("MessageSid") or form.get("SmsSid")
+    location = location_text(form)
 
     decision = consent.decide(contact, body)
     if decision.deleted:
@@ -106,10 +122,11 @@ async def inbound_message(request: Request) -> Response:
         pipeline.enqueue(released)
 
     # A bare YES / STOP reply is a consent answer, not case content.
-    if not (num_media == 0 and consent.is_consent_keyword(body)):
+    if not (num_media == 0 and not location and consent.is_consent_keyword(body)):
         hold = decision.hold
-        if num_media == 0 and body:
-            item = db.add_item(contact_id=contact["id"], channel=channel, kind="text", body=body,
+        text = "\n".join(t for t in (location, body) if t)
+        if num_media == 0 and text:
+            item = db.add_item(contact_id=contact["id"], channel=channel, kind="text", body=text,
                                external_id=sid, status="held" if hold else "received",
                                author=form.get("ProfileName") or None)
             if item and not hold:
