@@ -1,4 +1,4 @@
-"""Follow-up questions: after each draft, ask the contact only what is still missing from the school profile.
+"""Follow-up questions: after each draft, ask the contact only what is still missing (school profile or donor offer).
 
 14 short questions (French and English) cover what the priority matrix needs. Each question knows how to tell
 from the case draft whether it is already answered, so a school that already explained its water problem is
@@ -112,32 +112,85 @@ def message_language(data: dict) -> str:
     return "fr" if ("fr" in lang or "fran" in lang) else "en"
 
 
-def applies(data: dict) -> bool:
-    """Only school / community needs get profile questions, not partners, donors or personal chats."""
+# Donors, partners and suppliers get their own short question bank, asked the same way.
+DONOR_QUESTIONS = [
+    Question(101, "what_and_how_much",
+             "What exactly can you provide, and how many (or how much)?",
+             "Que pouvez-vous offrir exactement, et en quelle quantité (ou quel montant) ?",
+             lambda d, t: any(o.get("quantity") for o in d.get("offers") or []) or bool((d.get("donor") or {}).get("amount"))),
+    Question(102, "regions",
+             "Which regions or towns can you deliver to or support?",
+             "Dans quelles régions ou villes pouvez-vous livrer ou intervenir ?",
+             lambda d, t: bool((d.get("donor") or {}).get("regions"))),
+    Question(103, "when",
+             "When is it available, and until when?",
+             "Quand est-ce disponible, et jusqu'à quand ?",
+             lambda d, t: bool((d.get("donor") or {}).get("timeframe"))
+             or any(o.get("availability") for o in d.get("offers") or [])),
+    Question(104, "organisation",
+             "Are you giving as a person or an organisation? If an organisation, is it registered in Cameroon?",
+             "Donnez-vous à titre personnel ou au nom d'une organisation ? Si c'est une organisation, est-elle enregistrée au Cameroun ?",
+             lambda d, t: (d.get("donor") or {}).get("kind", "unknown") != "unknown"
+             and ((d.get("donor") or {}).get("kind") == "individual"
+                  or (d.get("donor") or {}).get("registered", "unknown") != "unknown")),
+    Question(105, "conditions",
+             "Do you have any conditions (transport, timing, reports or photos you need back)?",
+             "Avez-vous des conditions (transport, délais, rapports ou photos à vous envoyer) ?",
+             lambda d, t: bool((d.get("donor") or {}).get("conditions"))
+             or any(o.get("conditions") for o in d.get("offers") or [])),
+    Question(106, "contact",
+             "Who is the best contact person, and on which number?",
+             "Qui est la meilleure personne à contacter, et à quel numéro ?",
+             lambda d, t: bool(d.get("people"))),
+    Question(107, "past_work",
+             "Have you worked with PS43 before? If yes, with which school?",
+             "Avez-vous déjà travaillé avec PS43 ? Si oui, avec quelle école ?",
+             lambda d, t: bool((d.get("donor") or {}).get("past_work_with_ps43"))),
+]
+DONOR_BY_ID = {q.id: q for q in DONOR_QUESTIONS}
+DONOR_ASK_ORDER = [101, 102, 103, 104, 105, 106, 107]
+DONOR_INTRO = {
+    "fr": "PS43 : Merci pour votre offre ! Pour la relier à une école, pouvez-vous répondre à {n} :",
+    "en": "PS43: Thank you for your offer! To match it with a school, could you answer {n}:",
+}
+
+
+def bank_for(data: dict) -> str | None:
+    """'school', 'donor' or None (no questions: personal chats, contractors asking for work...)."""
     if data.get("relevance") == "not_relevant":
-        return False
-    if data.get("case_type") == "offer":
-        return False
-    return (data.get("organization") or {}).get("type", "unknown") in ("school", "community", "unknown")
+        return None
+    org_type = (data.get("organization") or {}).get("type", "unknown")
+    if data.get("case_type") == "offer" or org_type == "donor":
+        return "donor"
+    if org_type in ("school", "community", "unknown"):
+        return "school"
+    return None
+
+
+def applies(data: dict) -> bool:
+    return bank_for(data) is not None
 
 
 def follow_up(data: dict, trust: str = "self_reported", limit: int = MAX_PER_MESSAGE) -> dict:
     lang = message_language(data)
-    if not applies(data):
-        return {"applies": False, "language": lang, "missing": [], "asking": [],
+    bank = bank_for(data)
+    if bank is None:
+        return {"applies": False, "bank": None, "language": lang, "missing": [], "asking": [],
                 "missing_topics": [], "complete": None, "message": ""}
-    missing = [qid for qid in ASK_ORDER if not BY_ID[qid].answered(data, trust)]
+    order, by_id, intro = ((DONOR_ASK_ORDER, DONOR_BY_ID, DONOR_INTRO) if bank == "donor"
+                           else (ASK_ORDER, BY_ID, INTRO))
+    missing = [qid for qid in order if not by_id[qid].answered(data, trust)]
     asking = missing[:limit]
-    complete = round(100 * (len(QUESTIONS) - len(missing)) / len(QUESTIONS))
+    complete = round(100 * (len(order) - len(missing)) / len(order))
     message = ""
     if asking:
         one, many = COUNT[lang]
-        lines = [INTRO[lang].format(n=one if len(asking) == 1 else many.format(n=len(asking)))]
-        lines += [f"{n}. {getattr(BY_ID[qid], lang)}" for n, qid in enumerate(asking, 1)]
+        lines = [intro[lang].format(n=one if len(asking) == 1 else many.format(n=len(asking)))]
+        lines += [f"{n}. {getattr(by_id[qid], lang)}" for n, qid in enumerate(asking, 1)]
         lines.append(OUTRO[lang])
         message = "\n".join(lines)
-    return {"applies": True, "language": lang, "missing": missing, "asking": asking,
-            "missing_topics": [BY_ID[q].topic for q in missing], "complete": complete, "message": message}
+    return {"applies": True, "bank": bank, "language": lang, "missing": missing, "asking": asking,
+            "missing_topics": [by_id[q].topic for q in missing], "complete": complete, "message": message}
 
 
 def refresh(data: dict) -> dict:

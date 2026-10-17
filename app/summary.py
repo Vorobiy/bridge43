@@ -18,8 +18,11 @@ log = logging.getLogger("bridge43.summary")
 NEED_CATEGORIES = [
     "classrooms_building", "roofing", "water", "sanitation_latrines", "furniture", "electricity",
     "connectivity", "devices", "learning_materials", "teacher_training", "staffing", "safety_security",
-    "fees_and_access", "birth_registration", "school_meals_health", "other",
+    "fees_and_access", "birth_registration", "school_meals_health", "funding", "transport", "other",
 ]
+DONOR_KINDS = ["individual", "diaspora_group", "company", "ngo", "foundation", "faith_group", "government",
+               "other", "unknown"]
+DONOR_GIVES = ["money", "goods", "services", "volunteers", "transport", "expertise"]
 READINESS_KEYS = ["electricity", "internet", "secure_storage", "road_access", "trained_staff", "space",
                   "parent_association"]
 
@@ -52,7 +55,7 @@ CASE_TOOL = {
         "type": "object",
         "additionalProperties": False,
         "required": ["relevance", "relevance_reason", "what_changed", "case_type", "title", "organization", "location",
-                     "operating_status", "situation", "profile", "needs", "offers", "assets",
+                     "operating_status", "situation", "profile", "donor", "needs", "offers", "assets",
                      "readiness", "numbers", "people", "plan", "open_questions", "safety_flags",
                      "language", "confidence", "confirmation_message"],
         "properties": {
@@ -121,6 +124,28 @@ CASE_TOOL = {
                                                   "note": {"type": ["string", "null"]}, "citations": _cite}}
                                for k, desc in PROFILE_AREAS.items()},
             },
+            "donor": {
+                "type": "object", "additionalProperties": False,
+                "required": ["kind", "gives", "provides_summary", "amount", "regions", "timeframe", "conditions",
+                             "registered", "past_work_with_ps43", "citations"],
+                "description": "Only for donors, partners, contractors or suppliers offering help (case_type offer). "
+                               "For a school asking for help: kind unknown, empty lists and nulls.",
+                "properties": {
+                    "kind": {"type": "string", "enum": DONOR_KINDS},
+                    "gives": {"type": "array", "items": {"type": "string", "enum": DONOR_GIVES}},
+                    "provides_summary": {"type": ["string", "null"],
+                                         "description": "1-3 plain sentences: what they can provide, how much, where and when."},
+                    "amount": {"type": ["string", "null"], "description": "Money offered if stated, with currency, e.g. '500,000 FCFA'."},
+                    "regions": {"type": "array", "items": {"type": "string"},
+                                "description": "Cameroon regions or towns they can serve, as stated; ['National'] if anywhere."},
+                    "timeframe": {"type": ["string", "null"], "description": "When it is available / until when."},
+                    "conditions": {"type": ["string", "null"], "description": "Their conditions: reporting, publicity, co-funding, transport..."},
+                    "registered": {"type": "string", "enum": ["yes", "no", "unknown"],
+                                   "description": "Registered organisation, as stated. 'no' for individuals."},
+                    "past_work_with_ps43": {"type": ["string", "null"], "description": "Earlier work with PS43 they mention, as stated."},
+                    "citations": _cite,
+                },
+            },
             "needs": {"type": "array", "items": {
                 "type": "object", "additionalProperties": False,
                 "required": ["category", "description", "quantity", "urgency", "citations"],
@@ -134,12 +159,15 @@ CASE_TOOL = {
                 }}},
             "offers": {"type": "array", "description": "Resources offered (partner/donor/contractor conversations).", "items": {
                 "type": "object", "additionalProperties": False,
-                "required": ["category", "description", "quantity", "availability", "conditions", "citations"],
+                "required": ["category", "description", "quantity", "availability", "conditions", "location", "abroad",
+                             "citations"],
                 "properties": {
                     "category": {"type": "string", "enum": NEED_CATEGORIES},
                     "description": {"type": "string"},
                     "quantity": {"type": ["string", "null"]},
                     "availability": {"type": ["string", "null"], "description": "When/where it is available."},
+                    "location": {"type": ["string", "null"], "description": "Where the items are now, e.g. 'Douala warehouse', 'Toronto, Canada'."},
+                    "abroad": {"type": "boolean", "description": "true if the items are outside Cameroon and must be shipped in."},
                     "conditions": {"type": ["string", "null"], "description": "Constraints, e.g. 'needs reliable power', 'Northwest only'."},
                     "citations": _cite,
                 }}},
@@ -221,9 +249,15 @@ Rules:
 - readiness.parent_association: "yes" if the school has an active parents' association (APEE/PTA) or school
   management committee that can help receive, guard and maintain what is delivered.
 - location: copy coordinates only from a "Shared location" item, a map link or a GPS field; never estimate them.
-- operating_status: closed or unsafe schools must be flagged; also add a safety_flags entry when the area is unsafe."""
+- operating_status: closed or unsafe schools must be flagged; also add a safety_flags entry when the area is unsafe.
+- Donors and partners: anyone offering money, goods, services, transport, volunteers or expertise is case_type
+  "offer". List each thing they offer in offers (one entry per kind of item, with quantity and conditions; money
+  goes in offers with category "funding") and fill the donor block. Never invent amounts or promises.
+- Local contractors, NGOs and suppliers who offer to do the work are also "offer" cases (services). Shipping or
+  transport offers use category "transport". Goods held outside Cameroon (e.g. laptops donated in Canada) are
+  abroad = true with their location."""
 
-CHANNEL_LABELS = {"whatsapp": "WhatsApp", "sms": "SMS", "call": "Phone/WhatsApp call", "kobo": "Field form (KoBo)",
+CHANNEL_LABELS = {"web": "Website form", "whatsapp": "WhatsApp", "sms": "SMS", "call": "Phone/WhatsApp call", "kobo": "Field form (KoBo)",
                   "upload": "Uploaded", "agent": "Staff call notes"}
 KIND_LABELS = {"text": "message", "audio": "voice recording", "image": "photo", "video": "video",
                "document": "document", "form": "form"}
@@ -377,7 +411,7 @@ def normalize(data: dict) -> dict:
     item_defaults = {
         "needs": {"category": "other", "description": "", "quantity": None, "urgency": "unknown", "citations": []},
         "offers": {"category": "other", "description": "", "quantity": None, "availability": None,
-                   "conditions": None, "citations": []},
+                   "conditions": None, "location": None, "abroad": False, "citations": []},
         "assets": {"description": "", "citations": []},
         "people": {"name": "", "role": None, "organization": None, "citations": []},
         "plan": {"action": "", "owner": "unknown", "due": None, "agreed": False, "citations": []},
@@ -391,6 +425,9 @@ def normalize(data: dict) -> dict:
         "location": {"latitude": None, "longitude": None, "description": None, "citations": []},
         "operating_status": {"status": "unknown", "safe_to_reach": "unknown", "note": None, "citations": []},
         "situation": {"text": "", "citations": []},
+        "donor": {"kind": "unknown", "gives": [], "provides_summary": None, "amount": None, "regions": [],
+                  "timeframe": None, "conditions": None, "registered": "unknown", "past_work_with_ps43": None,
+                  "citations": []},
         "numbers": {**{k: None for k in NUMBER_KEYS}, "citations": []},
         "confirmation_message": {"language": "unknown", "text": ""},
     }
@@ -398,6 +435,10 @@ def normalize(data: dict) -> dict:
         if key == "confirmation_message" and not isinstance(data.get(key), dict):
             continue  # filled below once the language is known
         data[key] = {**defaults, **(data[key] if isinstance(data.get(key), dict) else {})}
+    for k in ("gives", "regions"):
+        if not isinstance(data["donor"].get(k), list):
+            data["donor"][k] = []
+        data["donor"][k] = [str(v) for v in data["donor"][k] if v]
     for group, keys, valid in (("readiness", READINESS_KEYS, ["yes", "partial", "no", "unknown"]),
                                ("profile", PROFILE_KEYS, PROFILE_LEVELS)):
         block = data.get(group) if isinstance(data.get(group), dict) else {}

@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from . import db, recorder_api, web
+from . import db, ops_web, public_web, recorder_api, web
 from .channels import kobo, twilio
 from .config import settings
 from .processing import ffmpeg, pipeline
@@ -50,7 +50,9 @@ app = FastAPI(title="Bridge43 intake", lifespan=lifespan)
 app.include_router(twilio.router)
 app.include_router(kobo.router)
 app.include_router(recorder_api.router)
+app.include_router(public_web.router)
 app.include_router(web.router)
+app.include_router(ops_web.router)
 
 
 @app.get("/health", include_in_schema=False)

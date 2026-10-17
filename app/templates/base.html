@@ -49,6 +49,40 @@ h3 { font-size: 14px; margin: 16px 0 6px; text-transform: uppercase; letter-spac
 .b-ok, .b-visit_confirmed { background: var(--accent-soft); color: var(--accent); }
 .b-photo_backed, .b-partially_open, .b-risky { background: var(--warn-soft); color: var(--warn); }
 .b-closed { background: var(--bad); color: #fff; }
+/* part two */
+header.top nav { overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
+.b-new, .b-none, .b-New, .b-first, .b-no_quantity { background: var(--info-soft); }
+.b-matched, .b-single, .b-combined, .b-fair, .b-Verified { background: var(--accent-soft); color: var(--accent); }
+.b-in_progress, .b-partial, .b-low, .b-related { background: var(--warn-soft); color: var(--warn); }
+.b-delivered, .b-covered { background: var(--accent-soft); color: var(--accent); }
+.b-checked, .b-Trusted { background: var(--accent); color: #fff; }
+.b-cancelled { background: var(--bad-soft); color: var(--bad); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.kpis > div { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; }
+.kpis strong { display: block; font-size: 26px; line-height: 1.2; }
+.kpis span { font-size: 12.5px; color: var(--muted); }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+.card a.title { font-weight: 700; text-decoration: none; color: var(--ink); }
+.card a.title:hover { color: var(--accent); }
+.pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); margin: 2px 2px 0 0; }
+.meter { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.meter > i { display: block; height: 100%; background: var(--accent); }
+.q-act_now { --q: var(--bad); } .q-prepare_first { --q: var(--warn); } .q-quick_wins { --q: var(--accent); }
+.q-monitor { --q: var(--muted); } .q-safety_hold { --q: var(--bad); }
+.qhead { border-left: 4px solid var(--q); padding-left: 8px; margin: 0 0 8px; }
+.log { list-style: none; padding: 0; margin: 0; }
+.log li { padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.log .when { color: var(--muted); font-size: 12px; }
+.board { display: grid; grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: 12px; overflow-x: auto; }
+.board .col { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; min-height: 120px; }
+.board .col h3 { margin: 4px 4px 10px; font-size: 14px; }
+.board .card { margin-bottom: 8px; }
+.inline { display: inline; } .inline button { padding: 3px 10px; font-size: 13px; }
+.check { display: flex; gap: 8px; align-items: center; font-weight: 400; margin: 6px 0; }
+.check input { width: auto; }
 .flash { padding: 10px 14px; border-radius: var(--radius); margin-bottom: 14px; }
 .flash.ok { background: var(--accent-soft); }
 .flash.err { background: var(--bad-soft); color: var(--bad); }
@@ -74,7 +108,7 @@ details > summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
 <body>
 <header class="top">
   <a class="brand" href="/">Bridge<span>43</span></a>
-  <nav><a href="/">Inbox</a><a href="/intake">Add intake</a><a href="/api/cases" target="_blank">Approved cases (JSON)</a></nav>
+  <nav><a href="/">Inbox</a><a href="/dashboard">Priorities</a><a href="/tickets">Tickets</a><a href="/partners">Partners</a><a href="/matches">Matching</a><a href="/intake">Add intake</a><a href="/join" target="_blank">Public sign-up</a></nav>
 </header>
 <main>
 {% if open_mode %}<div class="flash warn small">Development mode: no staff password is set, so these screens are open. Set STAFF_PASSWORD before putting this online.</div>{% endif %}

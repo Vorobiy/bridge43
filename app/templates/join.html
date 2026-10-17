@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ t.title }}</title>
+<style>
+:root { --bg:#f6f5f1; --panel:#fff; --ink:#1d1f1c; --muted:#5d625a; --line:#dedbd2; --accent:#1f6b4f; --accent-soft:#e3f0e9; --bad:#a3271f; --bad-soft:#fbe6e3; }
+@media (prefers-color-scheme: dark) { :root { --bg:#151714; --panel:#1e211d; --ink:#ecebe6; --muted:#a3a79e; --line:#353a33; --accent:#5fbf92; --accent-soft:#1f3529; --bad:#f08a80; --bad-soft:#3d1f1c; } }
+* { box-sizing: border-box; }
+body { margin:0; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); }
+main { max-width: 640px; margin: 0 auto; padding: 20px 16px 40px; }
+header { display:flex; justify-content: space-between; align-items:center; margin-bottom: 8px; }
+.brand { font-weight: 800; font-size: 20px; } .brand span { color: var(--accent); }
+a { color: var(--accent); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-top: 14px; }
+.big { display:block; text-align:center; padding: 16px; border-radius: 12px; font-weight: 700; font-size: 17px; text-decoration:none; margin-top: 12px; }
+.big.primary { background: var(--accent); color: #fff; } .big.secondary { border: 2px solid var(--accent); color: var(--accent); background: var(--panel); }
+label { display:block; font-weight: 600; font-size: 14px; margin: 12px 0 4px; }
+input[type=text], input[type=tel], input[type=email], input[type=number], select, textarea { font: inherit; width:100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+textarea { min-height: 110px; }
+.checks { display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 4px 12px; }
+.check { display:flex; gap: 8px; align-items: flex-start; font-weight: 400; margin: 4px 0; }
+.check input { margin-top: 4px; }
+button { font: inherit; font-weight: 700; width: 100%; padding: 14px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; margin-top: 16px; cursor: pointer; }
+.muted { color: var(--muted); } .err { background: var(--bad-soft); color: var(--bad); padding: 10px 14px; border-radius: 8px; }
+.hp { position: absolute; left: -5000px; }
+</style>
+</head>
+<body>
+<main>
+<header><div class="brand">PS43 <span>Foundation</span></div>
+  <a href="?lang={{ t.lang_other_code }}">{{ t.lang_other }}</a></header>
+
+{% if done %}
+  <div class="panel"><h1 style="margin-top:0">{{ t.thanks }}</h1><p>{{ t.thanks_more }}</p>
+    <p><a href="/join?lang={{ lang }}">←</a></p></div>
+{% elif not form %}
+  <p class="muted">{{ t.intro }}</p>
+  <a class="big primary" href="/join/school?lang={{ lang }}">{{ t.school_cta }}</a>
+  <a class="big secondary" href="/join/partner?lang={{ lang }}">{{ t.partner_cta }}</a>
+{% elif form == "school" %}
+  <div class="panel">
+    <h1 style="margin-top:0">{{ t.school_title }}</h1>
+    {% if error %}<p class="err">{{ error }}</p>{% endif %}
+    <form method="post" action="/join/school">
+      <input type="hidden" name="lang" value="{{ lang }}">
+      <input class="hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <label for="sn">{{ t.school_name }} *</label><input id="sn" type="text" name="school_name" required maxlength="200">
+      <label for="tw">{{ t.town }}</label><input id="tw" type="text" name="town" maxlength="120">
+      <label for="rg">{{ t.region }}</label><select id="rg" name="region"><option value=""></option>{% for r in regions %}<option>{{ r }}</option>{% endfor %}</select>
+      <label for="yn">{{ t.your_name }}</label><input id="yn" type="text" name="your_name" maxlength="120">
+      <label for="yr">{{ t.your_role }}</label><input id="yr" type="text" name="your_role" maxlength="120">
+      <label for="ph">{{ t.phone }} *</label><input id="ph" type="tel" name="phone" placeholder="+237 6.. .. .. .." maxlength="40">
+      <label for="em">{{ t.email }}</label><input id="em" type="email" name="email" maxlength="200">
+      <label for="pu">{{ t.pupils }}</label><input id="pu" type="number" name="pupils" min="0" max="20000">
+      <label>{{ t.needs }}</label>
+      <div class="checks">{% for n in needs %}<label class="check"><input type="checkbox" name="needs" value="{{ n }}"> {{ t.need_labels[n] }}</label>{% endfor %}</div>
+      <label for="dt">{{ t.details }}</label><textarea id="dt" name="details" maxlength="2000"></textarea>
+      <label class="check"><input type="checkbox" name="consent" value="1" required> {{ t.consent }}</label>
+      <button type="submit">{{ t.send }}</button>
+    </form>
+  </div>
+{% else %}
+  <div class="panel">
+    <h1 style="margin-top:0">{{ t.partner_title }}</h1>
+    {% if error %}<p class="err">{{ error }}</p>{% endif %}
+    <form method="post" action="/join/partner">
+      <input type="hidden" name="lang" value="{{ lang }}">
+      <input class="hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <label for="on">{{ t.org_name }} *</label><input id="on" type="text" name="org_name" required maxlength="200">
+      <label for="kd">{{ t.kind }}</label><select id="kd" name="kind"><option value=""></option>{% for k, label in t.kind_labels.items() %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select>
+      <label for="yn">{{ t.your_name }}</label><input id="yn" type="text" name="your_name" maxlength="120">
+      <label for="co">{{ t.country }}</label><input id="co" type="text" name="country" maxlength="80">
+      <label for="ph">{{ t.phone }} *</label><input id="ph" type="tel" name="phone" maxlength="40">
+      <label for="em">{{ t.email }}</label><input id="em" type="email" name="email" maxlength="200">
+      <label>{{ t.gives }}</label>
+      <div class="checks">{% for g in gives %}<label class="check"><input type="checkbox" name="gives" value="{{ g }}"> {{ t.give_labels[g] }}</label>{% endfor %}</div>
+      <label for="od">{{ t.offer_details }} *</label><textarea id="od" name="offer_details" required maxlength="2000"></textarea>
+      <label>{{ t.where }}</label>
+      <div class="checks"><label class="check"><input type="checkbox" name="regions" value="National"> {{ t.national }}</label>
+        {% for r in regions %}<label class="check"><input type="checkbox" name="regions" value="{{ r }}"> {{ r }}</label>{% endfor %}</div>
+      <label class="check"><input type="checkbox" name="abroad" value="1"> {{ t.abroad }}</label>
+      <label class="check"><input type="checkbox" name="consent" value="1" required> {{ t.consent }}</label>
+      <button type="submit">{{ t.send }}</button>
+    </form>
+  </div>
+{% endif %}
+</main>
+</body>
+</html>
