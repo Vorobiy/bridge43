@@ -77,6 +77,13 @@ the .zip on **Add intake**. Voice notes are transcribed, photos described, and a
 | `TWILIO_*` | Live WhatsApp/SMS/calls, sending confirmations | twilio.com (WhatsApp sandbox is free to test) |
 | `KOBO_*` | Field forms | kf.kobotoolbox.org → project → Settings → REST Services |
 
+### Run it permanently on a Mac
+
+`scripts/mac_services.sh install <your-ngrok-domain>` installs the server, a fixed-address ngrok tunnel
+(free static domain from dashboard.ngrok.com → Domains) and the call recorder as background services:
+they start at login, restart if they crash, and keep the Mac awake. `status`, `logs`, `restart` and
+`uninstall` do what they say. Logs go to `~/Library/Logs/Bridge43/`.
+
 ### Connect live channels (Twilio)
 
 1. Expose the server: `cloudflared tunnel --url http://localhost:8000` (or ngrok) and set `PUBLIC_BASE_URL` to that URL.
