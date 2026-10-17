@@ -305,3 +305,21 @@ def test_whatsapp_window_title_names_are_cleaned(client, monkeypatch):
                     data={"contact": "‎Connor - WhatsApp voice call"}, files={"file": ("c.caf", b"x", "audio/x-caf")})
     items = db.thread_items(r.json()["thread_id"])
     assert len(items) == 3  # notes + recorder note + recording, all in Connor's case
+
+
+def test_text_after_name_only_call_joins_the_same_case(client, monkeypatch):
+    """Connor called on WhatsApp Desktop (name only), then texts the WhatsApp number: same case."""
+    monkeypatch.setattr(settings, "recorder_token", "tok")
+    r = client.post("/api/recorder/calls", headers={"Authorization": "Bearer tok"},
+                    data={"contact": "‎Connor - WhatsApp voice call"}, files={"file": ("c.caf", b"x", "audio/x-caf")})
+    case = db.get_thread(r.json()["thread_id"])
+    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+16475550123", "Body": "Hi, following up on our call",
+                                                    "MessageSid": "SMconn", "ProfileName": "Connor"})
+    items = db.thread_items(case["id"])
+    assert items[-1]["body"] == "Hi, following up on our call"
+    contact = db.get_contact(case["contact_id"])
+    assert contact["address"] == "+16475550123" and contact["reply_to"] == "whatsapp:+16475550123"
+    # and a later call with only the name still lands there
+    client.post("/api/recorder/calls", headers={"Authorization": "Bearer tok"},
+                data={"contact": "Connor"}, files={"file": ("c2.caf", b"x", "audio/x-caf")})
+    assert len([t for t in db.list_threads() if t["contact_id"] == contact["id"]]) == 1

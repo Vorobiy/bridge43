@@ -229,9 +229,20 @@ def get_or_create_contact(address: str, channel: str, display_name: str | None =
     with tx() as conn:
         found = conn.execute("SELECT * FROM contacts WHERE address = ?", (canon,)).fetchone()
         if not found and display_name and not phone_of(canon):
+            # no number (e.g. a WhatsApp Desktop call): match anyone with that name
             found = conn.execute(
                 "SELECT * FROM contacts WHERE lower(display_name) = lower(?) ORDER BY updated_at DESC LIMIT 1",
                 (display_name.strip(),)).fetchone()
+        if not found and display_name and phone_of(canon):
+            # first message with a number from someone we only knew by name (their call came in first):
+            # give that contact the number, so the text joins the same case
+            nameless = conn.execute(
+                "SELECT * FROM contacts WHERE lower(display_name) = lower(?) AND address NOT LIKE '+%' "
+                "ORDER BY updated_at DESC LIMIT 1", (display_name.strip(),)).fetchone()
+            if nameless:
+                conn.execute("UPDATE contacts SET address = ?, updated_at = ? WHERE id = ?",
+                             (canon, now(), nameless["id"]))
+                found = conn.execute("SELECT * FROM contacts WHERE id = ?", (nameless["id"],)).fetchone()
         if found:
             updates: dict[str, Any] = {}
             if display_name and not found["display_name"]:
