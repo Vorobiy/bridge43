@@ -39,6 +39,7 @@ class Settings:
 
     # Claude
     anthropic_api_key: str = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", ""))
+    anthropic_workspace_id: str = field(default_factory=lambda: os.getenv("ANTHROPIC_WORKSPACE_ID", ""))
     summary_model: str = field(default_factory=lambda: os.getenv("SUMMARY_MODEL", "claude-haiku-5-5"))
     vision_model: str = field(default_factory=lambda: os.getenv("VISION_MODEL", "claude-haiku-5-5"))
     staff_language: str = field(default_factory=lambda: os.getenv("STAFF_LANGUAGE", "English"))

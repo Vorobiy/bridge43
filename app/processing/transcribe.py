@@ -76,12 +76,13 @@ def _openai_compatible(speech: Path, duration: float | None) -> Transcript:
         {"start": round(s.get("start", 0), 1), "end": round(s.get("end", 0), 1), "text": s.get("text", "").strip()}
         for s in body.get("segments") or []
     ]
+    text = drop_hallucination((body.get("text") or "").strip())
     return Transcript(
-        text=(body.get("text") or "").strip(),
-        language=body.get("language"),
+        text=text,
+        language=body.get("language") if text else None,
         duration=body.get("duration") or duration,
         model=settings.transcribe_model,
-        segments=segments or None,
+        segments=(segments or None) if text else None,
     )
 
 
@@ -111,6 +112,18 @@ def _local_model(name: str):  # pragma: no cover - optional dependency
 
         _LOCAL_CACHE[name] = WhisperModel(name, device="auto", compute_type="int8")
     return _LOCAL_CACHE[name]
+
+
+# Whisper invents these on silence or music; they must never become "facts" in a case.
+HALLUCINATIONS = {"thank you for watching", "thanks for watching", "merci d'avoir regardé", "sous-titres réalisés par",
+                  "subtitles by", "please subscribe", "thank you", "merci", "you"}
+
+
+def drop_hallucination(text: str) -> str:
+    norm = text.lower().strip(" .!?…").replace("’", "'")
+    if norm in HALLUCINATIONS or any(norm.startswith(h) and len(norm) < len(h) + 25 for h in HALLUCINATIONS if len(h) > 8):
+        return ""
+    return text
 
 
 def format_with_timestamps(t: Transcript) -> str:
