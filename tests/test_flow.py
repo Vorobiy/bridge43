@@ -323,3 +323,30 @@ def test_text_after_name_only_call_joins_the_same_case(client, monkeypatch):
     client.post("/api/recorder/calls", headers={"Authorization": "Bearer tok"},
                 data={"contact": "Connor"}, files={"file": ("c2.caf", b"x", "audio/x-caf")})
     assert len([t for t in db.list_threads() if t["contact_id"] == contact["id"]]) == 1
+
+
+def test_new_message_updates_an_approved_case(client, fakes):
+    """A new WhatsApp text on an approved case produces an updated draft built on the approved record."""
+    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+237670000040", "Body": "Notre toit fuit", "MessageSid": "U1"})
+    case = _thread_for("whatsapp:+237670000040")
+    summary.summarize_thread(case["id"])
+    s1 = db.latest_summary(case["id"])
+    edited = dict(s1["data"], situation={"text": "Staff-corrected situation.", "citations": []})
+    db.update_summary(s1["id"], data=edited)
+    client.post(f"/summaries/{s1['id']}/approve", data={"notes": "ok"})
+    assert db.get_thread(case["id"])["status"] == "approved"
+
+    # nothing new -> automatic update does nothing
+    assert summary.summarize_thread(case["id"]) is None
+
+    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+237670000040", "Body": "Aussi 30 bancs cassés", "MessageSid": "U2"})
+    fakes.model_output = dict(s1["data"], what_changed="Adds 30 broken benches [I2].")
+    s2 = summary.summarize_thread(case["id"])           # what the pipeline runs after new items settle
+    assert s2 is not None and s2["version"] == 2
+    prompt = fakes.model_calls[-1]
+    assert "<current_case_record>" in prompt and "Staff-corrected situation." in prompt
+    assert "reviewed and approved by PS43 staff" in prompt and "Aussi 30 bancs" in prompt
+    assert db.get_thread(case["id"])["status"] == "draft_ready"   # back to a person for review
+    assert db.get_thread(case["id"])["case_number"] == case["case_number"]
+    page = client.get(f"/threads/{case['id']}").text
+    assert "Updated from new messages" in page and "Adds 30 broken benches" in page

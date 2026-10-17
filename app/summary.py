@@ -32,10 +32,13 @@ CASE_TOOL = {
     "input_schema": {
         "type": "object",
         "additionalProperties": False,
-        "required": ["case_type", "title", "organization", "situation", "needs", "offers", "assets",
+        "required": ["what_changed", "case_type", "title", "organization", "situation", "needs", "offers", "assets",
                      "readiness", "numbers", "people", "plan", "open_questions", "safety_flags",
                      "language", "confidence", "confirmation_message"],
         "properties": {
+            "what_changed": {"type": "string",
+                             "description": "If a current case record was given: 1-3 short sentences on what the NEW items added or changed "
+                                            "(cite them like [I12]), or 'No change' if they add nothing. If there is no current record: 'New case'."},
             "case_type": {"type": "string", "enum": ["need", "offer", "update", "unclear"],
                           "description": "need = a school/community asking for help; offer = a partner, donor, contractor or supplier offering resources; update = progress on existing work; unclear = not enough information."},
             "title": {"type": "string", "description": "Short case title, e.g. 'GBHS Bali - leaking roof, 2 classrooms'."},
@@ -215,31 +218,47 @@ def call_model(prompt: str) -> dict:
     raise RuntimeError(f"model returned no case draft (stop_reason={msg.stop_reason})")
 
 
-def build_prompt(items: list[dict], contact: dict) -> str:
-    return (
-        f"Contact: {contact.get('display_name') or 'unknown name'} ({contact['address']}), "
-        f"first channel: {contact['channel']}.\n"
-        f"Below are the {len(items)} source items of this intake conversation, oldest first.\n\n"
-        f"<source_items>\n{render_items(items, contact)}\n</source_items>\n\n"
-        "Write the case draft with the record_case_draft tool."
-    )
+def build_prompt(items: list[dict], contact: dict, previous: dict | None = None) -> str:
+    head = (f"Contact: {contact.get('display_name') or 'unknown name'} ({contact['address']}), "
+            f"first channel: {contact['channel']}.\n")
+    if not previous:
+        return (head +
+                f"Below are the {len(items)} source items of this intake conversation, oldest first.\n\n"
+                f"<source_items>\n{render_items(items, contact)}\n</source_items>\n\n"
+                "Write the case draft with the record_case_draft tool.")
+    record = {k: v for k, v in previous["data"].items() if not k.startswith("_")}
+    seen = set(previous["item_ids"])
+    new_ids = ", ".join("I%d" % i["id"] for i in items if i["id"] not in seen) or "none"
+    reviewed = "reviewed and approved by PS43 staff" if previous["status"] == "approved" else (
+        "edited by PS43 staff" if previous["data"].get("_edited_by") else "an earlier AI draft")
+    return (head +
+            f"This case already has a record ({reviewed}). New items have arrived since it was written.\n\n"
+            f"<current_case_record>\n{json.dumps(record, ensure_ascii=False, indent=1)}\n</current_case_record>\n\n"
+            f"New item ids: {new_ids}.\n"
+            f"All {len(items)} source items, oldest first:\n\n"
+            f"<source_items>\n{render_items(items, contact)}\n</source_items>\n\n"
+            "Update the case with the record_case_draft tool: start from the current record and keep its facts, "
+            "wording and staff corrections unless a new item adds to, corrects or contradicts them; add what the new "
+            "items say (with citations); and say in what_changed what is new. Record contradictions in open_questions.")
 
 
 def summarize_thread(thread_id: int, manual: bool = False) -> dict | None:
     """Generate a new draft for the case. Returns the stored summary row, or None if nothing to do.
 
-    Approved cases keep collecting material; they are only re-drafted when staff ask (manual=True).
+    When the case already has a record (approved or a draft), the new draft is an UPDATE of that record
+    with the new items, so staff edits carry over. The case then goes back to "needs review".
     """
     thread = db.get_thread(thread_id)
     if not thread or thread["status"] in ("rejected", "closed"):
         return None
-    if thread["status"] == "approved" and not manual:
-        return None
     items = [i for i in db.thread_items(thread_id) if i["status"] in ("processed", "failed")]
     if not items:
         return None
+    previous = db.latest_summary(thread_id)
+    if previous and not manual and set(i["id"] for i in items) <= set(previous["item_ids"]):
+        return None  # nothing new since the current record
     contact = db.get_contact(thread["contact_id"])
-    data = call_model(build_prompt(items, contact))
+    data = call_model(build_prompt(items, contact, previous))
     data = _clean_citations(data, {i["id"] for i in items})
     data = normalize(data)
     summary = db.add_summary(thread_id, data, settings.summary_model, [i["id"] for i in items])
@@ -252,6 +271,7 @@ def summarize_thread(thread_id: int, manual: bool = False) -> dict | None:
 
 def normalize(data: dict) -> dict:
     """Fill any missing keys so templates and later steps can rely on the shape."""
+    data.setdefault("what_changed", "")
     data.setdefault("case_type", "unclear")
     data.setdefault("title", "Untitled case")
     data.setdefault("organization", {"name": None, "type": "unknown", "region": None, "town": None, "citations": []})

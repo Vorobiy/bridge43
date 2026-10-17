@@ -39,7 +39,8 @@ cites the source items (`I12`), which link to the original message, photo or cal
 get in touch. Everything they send afterwards, on any channel (WhatsApp texts, voice notes, photos, videos,
 SMS, calls through Twilio or the Mac call recorder, KoBo forms, staff notes), is filed in that same case.
 People are matched by phone number, so the same number on WhatsApp and SMS is one person, and by name
-when there is no number, which covers WhatsApp Desktop calls. Approved cases keep collecting; staff
+when there is no number, which covers WhatsApp Desktop calls. Every new message, photo or voice note updates the case: the AI rewrites the draft from the current
+record (keeping staff edits), says what changed, and sends the case back to "needs review". Staff
 **close** a case to start a fresh one, and can **move** an item or **merge** two cases when one school used two
 numbers. Search the inbox by case number, name or phone.
 

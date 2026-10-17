@@ -122,6 +122,10 @@
         <button type="submit" {% if in_flight %}disabled{% endif %}>Rewrite draft{% if new_since %} ({{ new_since|length }} new){% endif %}</button></form>
       {% endif %}
     </div>
+    {% if summary.version > 1 and d.what_changed and d.what_changed != "New case" %}
+    <div class="flash warn" style="margin:12px 0 0"><strong>Updated from new messages (v{{ summary.version }}):</strong>
+      {{ d.what_changed }}</div>
+    {% endif %}
     <h1 style="margin-top:12px">{{ d.title }}</h1>
     <p class="muted small">{{ d.organization.name or "Organization not stated" }} · {{ d.organization.type }}
       {% if d.organization.town or d.organization.region %} · {{ [d.organization.town, d.organization.region]|select|join(", ") }}{% endif %}
