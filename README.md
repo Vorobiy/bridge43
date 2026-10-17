@@ -23,6 +23,7 @@ This repo covers the first two steps of the system design:
 | Phone calls and WhatsApp calls | Twilio voice webhook | Spoken bilingual recording notice; call is forwarded to a staff phone and recorded, or the caller leaves a recorded message; recording is transcribed with timestamps |
 | Field visits | KoBoToolbox REST service | Form answers and attached photos/audio become items |
 | Exported WhatsApp chats | Staff upload (.zip with media, or .txt) | Parsed (iPhone + Android, English/French exports), each message and attachment becomes an item; re-uploads are de-duplicated |
+| WhatsApp Desktop calls on a PS43 Mac | **Call recorder** (`recorder/`): starts recording when WhatsApp uses the mic, asks who it was when the call ends | Both sides recorded, uploaded to `POST /api/recorder/calls`, transcribed |
 | Laptop calls / Wispr Notetaker / phone notes | Staff form: paste a transcript, add notes, attach recordings or photos | Same pipeline |
 
 **Converters:** voice → Whisper (Groq, OpenAI, or local faster-whisper), photo → Claude vision,
@@ -94,8 +95,10 @@ app/
   processing/transcribe.py      Whisper (API or local)
   processing/vision.py          Claude vision for photos, video frames, PDFs
   processing/ffmpeg.py          audio/video helpers
+  recorder_api.py       upload endpoint for the Mac call recorder
   summary.py            SNAP schema, prompt, citation checks
   web.py + templates/   inbox, intake forms, review screen, JSON API
+recorder/               Mac call recorder (Swift) - see recorder/README.md
 scripts/seed_demo.py    fictional demo data
 tests/                  end-to-end tests with fake AI providers (pytest)
 ```

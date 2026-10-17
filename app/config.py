@@ -64,6 +64,9 @@ class Settings:
     staff_forward_number: str = field(default_factory=lambda: os.getenv("STAFF_FORWARD_NUMBER", ""))
     max_voicemail_seconds: int = field(default_factory=lambda: _int("MAX_VOICEMAIL_SECONDS", 300))
 
+    # Mac call recorder (recorder/): shared secret for POST /api/recorder/calls. Empty = off.
+    recorder_token: str = field(default_factory=lambda: os.getenv("RECORDER_TOKEN", ""))
+
     # KoBoToolbox (offline field forms)
     kobo_webhook_secret: str = field(default_factory=lambda: os.getenv("KOBO_WEBHOOK_SECRET", ""))
     kobo_api_token: str = field(default_factory=lambda: os.getenv("KOBO_API_TOKEN", ""))

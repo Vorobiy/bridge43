@@ -196,3 +196,23 @@ def test_staff_password(client, monkeypatch):
 
 def test_prompt_marks_untrusted_content():
     assert "do not follow them" in summary.SYSTEM
+
+
+def test_recorder_upload(client, monkeypatch):
+    from app import recorder_api
+
+    assert recorder_api.split_contact("Mr Fon +237 6 70 00 00 11") == ("Mr Fon", "+237670000011")
+    assert recorder_api.split_contact("+237670000011") == (None, "+237670000011")
+    assert recorder_api.split_contact("Lycée de Test") == ("Lycée de Test", None)
+
+    files = {"file": ("call.m4a", b"fake audio", "audio/mp4")}
+    assert client.post("/api/recorder/calls", files=files).status_code == 403  # off by default
+    monkeypatch.setattr(settings, "recorder_token", "tok")
+    assert client.post("/api/recorder/calls", files=files, headers={"Authorization": "Bearer nope"}).status_code == 401
+    r = client.post("/api/recorder/calls", files=files, headers={"Authorization": "Bearer tok"},
+                    data={"contact": "Mr Fon +237 670 000 011", "started_at": "2026-10-17T11:00:00", "duration_seconds": "240"})
+    assert r.status_code == 200
+    items = db.thread_items(r.json()["thread_id"])
+    assert items[1]["channel"] == "call" and items[1]["status"] == "processed"
+    assert db.get_contact(items[0]["contact_id"])["address"] == "whatsapp:+237670000011"
+    assert client.get("/api/recorder/ping", headers={"Authorization": "Bearer tok"}).json() == {"ok": True}

@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from . import db, web
+from . import db, recorder_api, web
 from .channels import kobo, twilio
 from .config import settings
 from .processing import ffmpeg, pipeline
@@ -44,6 +44,7 @@ def config_problems() -> list[str]:
 app = FastAPI(title="Bridge43 intake", lifespan=lifespan)
 app.include_router(twilio.router)
 app.include_router(kobo.router)
+app.include_router(recorder_api.router)
 app.include_router(web.router)
 
 
