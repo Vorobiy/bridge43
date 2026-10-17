@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Bridge43{% endblock %} · Bridge43</title>
+{% block head %}{% endblock %}
+<style>
+:root {
+  --bg: #f6f5f1; --panel: #ffffff; --ink: #1d1f1c; --muted: #5d625a; --line: #dedbd2;
+  --accent: #1f6b4f; --accent-soft: #e3f0e9; --warn: #9a5b00; --warn-soft: #fbf0dc;
+  --bad: #a3271f; --bad-soft: #fbe6e3; --info-soft: #e7eef8; --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#151714; --panel:#1e211d; --ink:#ecebe6; --muted:#a3a79e; --line:#353a33;
+          --accent:#5fbf92; --accent-soft:#1f3529; --warn:#e3a54a; --warn-soft:#3a2d17;
+          --bad:#f08a80; --bad-soft:#3d1f1c; --info-soft:#1d2836; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); }
+a { color: var(--accent); }
+header.top { display:flex; align-items:center; gap:20px; padding: 12px 20px; border-bottom:1px solid var(--line); background: var(--panel); position: sticky; top:0; z-index:5; }
+header.top .brand { font-weight: 700; letter-spacing: .2px; text-decoration: none; color: var(--ink); }
+header.top .brand span { color: var(--accent); }
+header.top nav a { margin-right: 14px; text-decoration: none; color: var(--muted); font-weight: 500; }
+header.top nav a:hover { color: var(--ink); }
+main { max-width: 1280px; margin: 0 auto; padding: 20px; }
+h1 { font-size: 22px; margin: 4px 0 14px; }
+h2 { font-size: 16px; margin: 22px 0 8px; }
+h3 { font-size: 14px; margin: 16px 0 6px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.badge { display:inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; font-weight: 600; background: var(--line); color: var(--ink); white-space: nowrap; }
+.b-open { background: var(--info-soft); }
+.b-draft_ready { background: var(--warn-soft); color: var(--warn); }
+.b-approved { background: var(--accent-soft); color: var(--accent); }
+.b-rejected, .b-failed { background: var(--bad-soft); color: var(--bad); }
+.b-processing, .b-received, .b-awaiting_media { background: var(--info-soft); }
+.b-held { background: var(--warn-soft); color: var(--warn); }
+.b-need { background: var(--warn-soft); color: var(--warn); }
+.b-offer { background: var(--accent-soft); color: var(--accent); }
+.b-critical { background: var(--bad); color: #fff; }
+.b-high { background: var(--bad-soft); color: var(--bad); }
+.b-medium { background: var(--warn-soft); color: var(--warn); }
+.b-yes { background: var(--accent-soft); color: var(--accent); }
+.b-no { background: var(--bad-soft); color: var(--bad); }
+.b-partial { background: var(--warn-soft); color: var(--warn); }
+.flash { padding: 10px 14px; border-radius: var(--radius); margin-bottom: 14px; }
+.flash.ok { background: var(--accent-soft); }
+.flash.err { background: var(--bad-soft); color: var(--bad); }
+.flash.warn { background: var(--warn-soft); color: var(--warn); }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+tr.clickable { cursor: pointer; } tr.clickable:hover { background: var(--bg); }
+button, .btn { font: inherit; font-weight: 600; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; text-decoration: none; display: inline-block; }
+button.primary, .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { color: var(--bad); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+input[type=text], input[type=tel], select, textarea { font: inherit; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+textarea { min-height: 90px; }
+textarea.code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; min-height: 360px; }
+label { display: block; font-weight: 600; font-size: 13px; margin: 10px 0 4px; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; } .row > * { flex: 1 1 200px; }
+details > summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
+.cite { display:inline-block; font-size: 11px; font-weight: 700; padding: 0 5px; margin-left: 3px; border-radius: 5px; background: var(--info-soft); color: var(--accent); text-decoration: none; vertical-align: 1px; }
+.cite:hover { background: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">Bridge<span>43</span></a>
+  <nav><a href="/">Inbox</a><a href="/intake">Add intake</a><a href="/api/cases" target="_blank">Approved cases (JSON)</a></nav>
+</header>
+<main>
+{% if open_mode %}<div class="flash warn small">Development mode: no staff password is set, so these screens are open. Set STAFF_PASSWORD before putting this online.</div>{% endif %}
+{% block body %}{% endblock %}
+</main>
+</body>
+</html>

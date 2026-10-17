@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Add intake{% endblock %}
+{% block body %}
+<h1>Add intake</h1>
+{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+<p class="muted">Live WhatsApp, SMS, calls and KoBo forms arrive on their own. Use these forms for everything else.</p>
+
+<div class="row" style="align-items:flex-start">
+<form class="panel" method="post" action="/intake/export" enctype="multipart/form-data">
+  <h2 style="margin-top:0">Exported WhatsApp chat</h2>
+  <p class="small muted">In WhatsApp: open the chat → ⋮ / contact name → <em>Export chat</em> → <em>Include media</em>. Upload the .zip (or .txt).
+     Voice notes, photos and videos inside are transcribed and described automatically.</p>
+  <label for="chat">Chat export (.zip or .txt)</label>
+  <input id="chat" name="chat" type="file" accept=".zip,.txt" required>
+  <div class="row">
+    <div><label for="cn1">School / contact name</label><input id="cn1" name="contact_name" type="text" placeholder="Optional: taken from the chat"></div>
+    <div><label for="cp1">Their phone number</label><input id="cp1" name="contact_phone" type="tel" placeholder="+237 6…"></div>
+  </div>
+  <label for="sn">PS43 staff names as they appear in the chat</label>
+  <input id="sn" name="staff_names" type="text" placeholder="e.g. Eugene, PS43 Foundation">
+  <p class="small muted">Comma-separated. Their messages are kept as PS43's side of the conversation.</p>
+  <label for="do">Date format in the file</label>
+  <select id="do" name="date_order"><option value="auto">Detect automatically</option><option value="dmy">Day/Month/Year</option><option value="mdy">Month/Day/Year</option></select>
+  <p style="margin-top:16px"><button class="primary" type="submit">Import chat</button></p>
+</form>
+
+<form class="panel" method="post" action="/intake/notes" enctype="multipart/form-data">
+  <h2 style="margin-top:0">Call notes, recording or transcript</h2>
+  <p class="small muted">For a call taken on a laptop (record it, or paste the Wispr Notetaker transcript), a phone call you took notes on,
+     or photos from a visit. Tell the other person they are being recorded.</p>
+  <div class="row">
+    <div><label for="cn2">School / contact name</label><input id="cn2" name="contact_name" type="text" required></div>
+    <div><label for="cp2">Their phone number</label><input id="cp2" name="contact_phone" type="tel" placeholder="+237 6…"></div>
+  </div>
+  <div class="row">
+    <div><label for="src">Source</label>
+      <select id="src" name="source"><option value="whatsapp_call">WhatsApp call</option><option value="phone_call">Phone call</option>
+        <option value="visit">Site visit</option><option value="other">Other</option></select></div>
+    <div><label for="stn">Your name</label><input id="stn" name="staff_name" type="text"></div>
+  </div>
+  <label for="notes">Notes or pasted transcript</label>
+  <textarea id="notes" name="notes" placeholder="What the school said: needs, numbers, names, what you promised…"></textarea>
+  <label for="files">Recordings, photos, videos, PDFs</label>
+  <input id="files" name="files" type="file" multiple accept="audio/*,image/*,video/*,.pdf,.opus,.ogg,.m4a">
+  <p style="margin-top:16px"><button class="primary" type="submit">Add to case</button></p>
+</form>
+</div>
+{% endblock %}
