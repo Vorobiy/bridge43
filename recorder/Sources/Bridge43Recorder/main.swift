@@ -118,6 +118,7 @@ final class CallRecording: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
     private(set) var otherSpeechSeconds = 0.0
     private(set) var windowTitles: [String: Int] = [:]
     private(set) var micCaptured = false
+    private(set) var lastOtherAudioAt = Date()
 
     var otherURL: URL { folder.appendingPathComponent("other.caf") }
     var meURL: URL { folder.appendingPathComponent("me.caf") }
@@ -220,6 +221,7 @@ final class CallRecording: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
                 }
                 try otherFile?.write(from: pcm)
                 otherSpeechSeconds += speechSeconds(pcm)
+                lastOtherAudioAt = Date()
             } else {
                 if meFile == nil {
                     meFile = try AVAudioFile(forWriting: meURL, settings: format.settings,
@@ -335,7 +337,10 @@ func upload(_ file: URL, contact: String, startedAt: Date, duration: Double, set
     field("started_at", iso.string(from: startedAt))
     field("duration_seconds", String(format: "%.0f", duration))
     field("source", "whatsapp_call")
-    body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"call.m4a\"\r\nContent-Type: audio/mp4\r\n\r\n".data(using: .utf8)!)
+    let isCaf = file.pathExtension.lowercased() == "caf"
+    let fname = isCaf ? "call.caf" : "call.m4a"
+    let ctype = isCaf ? "audio/x-caf" : "audio/mp4"
+    body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(fname)\"\r\nContent-Type: \(ctype)\r\n\r\n".data(using: .utf8)!)
     body.append(try Data(contentsOf: file))
     body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
 
@@ -361,6 +366,7 @@ func finish(_ rec: CallRecording, settings: Settings) async {
         log("Discarded: \(why)")
         try? FileManager.default.removeItem(at: rec.folder)
     }
+    log("Checking rules…")
     if duration < settings.minCallSeconds {
         return discard(String(format: "only %.0f s (probably a voice note)", duration))
     }
@@ -384,12 +390,24 @@ func finish(_ rec: CallRecording, settings: Settings) async {
         }
         who = answer
     }
-    guard let mixed = mix(rec, ffmpeg: settings.ffmpegPath) else {
-        log("Could not prepare the audio. The raw recording is kept in \(rec.folder.path)")
+    let fm = FileManager.default
+    let toSend: URL
+    if let mixed = mix(rec, ffmpeg: settings.ffmpegPath) {
+        toSend = mixed
+    } else if fm.fileExists(atPath: rec.otherURL.path) {
+        log("Mixing failed; sending the caller's track as recorded (Bridge43 converts it).")
+        toSend = rec.otherURL
+    } else {
+        log("No audio was captured. Nothing to send.")
+        try? fm.removeItem(at: rec.folder)
         return
     }
+    if !fm.fileExists(atPath: rec.meURL.path) {
+        log("⚠️  Only the caller's voice was recorded. Turn on Terminal in System Settings → Privacy & Security → Microphone, then restart the recorder.")
+    }
+    log("Uploading to \(settings.serverURL)…")
     do {
-        let link = try await upload(mixed, contact: who, startedAt: rec.startedAt, duration: duration, settings: settings)
+        let link = try await upload(toSend, contact: who, startedAt: rec.startedAt, duration: duration, settings: settings)
         log("Filed in Bridge43 under \"\(who)\": \(link)")
         notify("Call filed in Bridge43", "\(who) · \(Int(duration / 60)) min. The case draft follows shortly.")
         try? FileManager.default.removeItem(at: rec.folder)   // don't keep audio on the laptop once it's filed
@@ -468,10 +486,14 @@ func watch(_ settings: Settings) async {
             }
         } else if let rec = current {
             if tick % 5 == 0 { await rec.refreshTitles() }
-            if idleTicks >= 3 {
+            let audioStopped = Date().timeIntervalSince(rec.lastOtherAudioAt) > 6
+            if idleTicks >= 3 || (audioStopped && rec.otherStart != nil) {
+                if audioStopped && idleTicks < 3 { log("WhatsApp call audio stopped: treating the call as ended") }
                 current = nil
                 await rec.stop()
-                log(String(format: "Call ended after %.0f s", Date().timeIntervalSince(rec.startedAt)))
+                log(String(format: "Call ended after %.0f s (caller spoke ~%.0f s, your mic %@)",
+                           Date().timeIntervalSince(rec.startedAt), rec.otherSpeechSeconds,
+                           FileManager.default.fileExists(atPath: rec.meURL.path) ? "recorded" : "NOT recorded"))
                 await finish(rec, settings: settings)
             }
         }

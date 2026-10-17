@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .config import settings
 
-AUDIO_EXT = {".opus", ".ogg", ".oga", ".mp3", ".m4a", ".aac", ".wav", ".amr", ".webm", ".flac", ".3gp"}
+AUDIO_EXT = {".caf", ".opus", ".ogg", ".oga", ".mp3", ".m4a", ".aac", ".wav", ".amr", ".webm", ".flac", ".3gp"}
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif", ".bmp"}
 VIDEO_EXT = {".mp4", ".mov", ".3gpp", ".mkv", ".avi", ".m4v"}
 DOC_EXT = {".pdf", ".docx", ".doc", ".txt", ".xlsx", ".csv"}
@@ -38,7 +38,7 @@ def kind_for(mime: str | None, filename: str | None = None) -> str:
 
 def guess_mime(filename: str) -> str:
     ext = Path(filename).suffix.lower()
-    overrides = {".opus": "audio/ogg", ".ogg": "audio/ogg", ".m4a": "audio/mp4", ".amr": "audio/amr",
+    overrides = {".caf": "audio/x-caf", ".opus": "audio/ogg", ".ogg": "audio/ogg", ".m4a": "audio/mp4", ".amr": "audio/amr",
                  ".webp": "image/webp", ".heic": "image/heic", ".3gp": "video/3gpp"}
     return overrides.get(ext) or mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
