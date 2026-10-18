@@ -36,7 +36,7 @@
     <option value="">All regions</option>{% for r in regions %}<option {% if r == region %}selected{% endif %}>{{ r }}</option>{% endfor %}
   </select></form>
 </div>
-<p class="muted small" style="margin-top:0">Every approved school, scored on need (what is missing × how many children) and readiness (can the site receive and look after help). Tap a school to open its case.</p>
+<p class="muted small" style="margin-top:0">Need = what is missing × how many children. Ready = can the school receive and look after help. Updates as soon as a school sends new information.</p>
 
 <div class="kpis">
   <div><strong>{{ kpis.schools }}</strong><span>schools ranked</span></div>
@@ -86,6 +86,8 @@
     {% for c in view.boxes[q] %}
     <div class="card">
       <a class="title" href="/threads/{{ c.thread.id }}">{{ c.score.name }}</a>
+      {% if c.pending == "new" %}<span class="badge b-draft_ready" title="Scored from the AI draft: approve it to open needs">not reviewed yet</span>
+      {% elif c.pending == "update" %}<span class="badge b-draft_ready" title="New messages changed the draft since it was approved">updated · check it</span>{% endif %}
       <div class="small muted">{{ [c.score.town, c.score.region]|select|join(", ") or "place not known" }} · {{ c.thread.case_number }}</div>
       <div class="scores"><span>need</span> {{ ui.meter(c.score.need, "need") }} <span>ready</span> {{ ui.meter(c.score.readiness, "readiness") }}</div>
       {% if c.score.gaps %}<div class="small">{{ c.score.gaps[:2]|join(" · ")|capitalize }}</div>{% endif %}

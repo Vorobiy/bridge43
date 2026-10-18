@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
-from . import db, gaps, media
+from . import db, gaps, matching, media
 from .channels import staff_intake, twilio
 from .config import settings
 from .processing import pipeline
@@ -37,6 +37,43 @@ def staff(credentials: HTTPBasicCredentials | None = Depends(_basic)) -> str:
 router = APIRouter(dependencies=[Depends(staff)])
 
 
+def _ago(ts: str | None) -> str:
+    """'2026-10-17T19:01:23+00:00' -> '5 min ago' / '3 h ago' / 'yesterday' / '12 Oct'."""
+    from datetime import datetime, timezone
+    if not ts:
+        return ""
+    try:
+        t = datetime.fromisoformat(ts)
+    except ValueError:
+        return ts[:16]
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    secs = (datetime.now(timezone.utc) - t).total_seconds()
+    if secs < 60:
+        return "just now"
+    if secs < 3600:
+        return f"{int(secs // 60)} min ago"
+    if secs < 86400:
+        return f"{int(secs // 3600)} h ago"
+    if secs < 2 * 86400:
+        return "yesterday"
+    if secs < 7 * 86400:
+        return f"{int(secs // 86400)} days ago"
+    return t.strftime("%-d %b")
+
+
+def _split_title(title: str | None) -> tuple[str, str]:
+    """'Lycée X — 3 leaking classrooms' -> ('Lycée X', '3 leaking classrooms')."""
+    import re as _re
+    parts = _re.split(r"\s+[—–-]\s+", title or "", maxsplit=1)
+    return (parts[0], parts[1]) if len(parts) == 2 else (title or "", "")
+
+
+templates.env.filters["ago"] = _ago
+templates.env.filters["split_title"] = _split_title
+templates.env.tests["offer_title"] = lambda title: _split_title(title)[1].strip().lower() == "offer"
+
+
 def _ctx(request: Request, **kw) -> dict:
     return {"request": request, "settings": settings, "open_mode": not settings.staff_password,
             "demo_data": bool(db.get_setting("demo_data", False)), **kw}
@@ -48,9 +85,10 @@ def _priority(summary: dict | None) -> dict | None:
     if not summary:
         return None
     approved = db.latest_approved_summary(summary["thread_id"])
-    if not approved or gaps.bank_for(approved["data"]) != "school":
+    use = summary if summary["status"] == "draft" else approved
+    if not use or gaps.bank_for(use["data"]) != "school":
         return None
-    return scoring.score_case(approved["data"])
+    return {**scoring.score_case(use["data"]), "provisional": use["status"] == "draft"}
 
 
 def _meta(item: dict) -> dict:
@@ -71,6 +109,10 @@ def inbox(request: Request, status: str | None = None, q: str = ""):
     everything = db.list_threads()
     counts = {s: sum(1 for t in everything if t["status"] == s)
               for s in ("open", "draft_ready", "approved", "closed", "rejected", "not_relevant")}
+    from . import gaps
+    for t in threads:
+        s = db.latest_summary(t["id"])
+        t["is_partner"] = bool(s) and gaps.bank_for(s["data"]) == "donor"
     return templates.TemplateResponse(request, "inbox.html", _ctx(request, threads=threads, status=status, counts=counts, q=q))
 
 
@@ -145,7 +187,10 @@ def thread_page(request: Request, thread_id: int, msg: str | None = None, error:
         other_cases=[t for t in db.list_threads() if t["id"] != thread_id],
         case_tickets=case_tickets, partner=partner, priority=_priority(summary), area_labels=AREA_LABELS,
         stage=workflow.case_stage(thread, case_tickets) if not partner else None,
-        next=workflow.case_next_step(thread, summary, case_tickets, partner)))
+        next=workflow.case_next_step(thread, summary, case_tickets, partner),
+        matches=workflow.case_matches(thread_id) if case_tickets and not partner else [],
+        category_labels=matching.CATEGORY_LABELS,
+        phone=db.phone_of(contact.get("reply_to") or contact["address"])))
 
 
 def _back(thread_id: int, **q: str) -> RedirectResponse:
@@ -255,17 +300,27 @@ def reject(summary_id: int, notes: str = Form(""), who: str = Depends(staff)):
     return _back(s["thread_id"], msg="Rejected. New messages from this contact will open a new case.")
 
 
-async def _send_to_contact(summary_id: int, text: str, who: str, label: str) -> tuple[dict, str | None]:
-    """Send a WhatsApp/SMS to the case contact and log it in the thread. Returns (thread, error)."""
+async def _send_to_contact(summary_id: int, text: str, who: str, label: str,
+                           manual: bool = False) -> tuple[dict, str | None]:
+    """Send a WhatsApp/SMS to the case contact and log it in the thread. Returns (thread, error).
+
+    manual=True: staff sent it from their own phone (WhatsApp/SMS link or copy-paste); only log it here.
+    """
     s = _summary_for(summary_id)
     thread = db.get_thread(s["thread_id"])
     contact = db.get_contact(thread["contact_id"])
     if contact["consent_status"] == "opted_out":
         return thread, "This contact opted out."
-    try:
-        sid = await run_in_threadpool(twilio.send_message, contact.get("reply_to") or contact["address"], text.strip())
-    except twilio.SendError as exc:
-        return thread, f"Not sent: {exc}"
+    if not text.strip():
+        return thread, "Nothing to send."
+    sid = None
+    if not manual:
+        try:
+            sid = await run_in_threadpool(twilio.send_message, contact.get("reply_to") or contact["address"], text.strip())
+        except twilio.SendError as exc:
+            return thread, f"Not sent: {exc}"
+    else:
+        label = label + " from staff phone"
     to = contact.get("reply_to") or contact["address"]
     db.add_item(contact_id=contact["id"], channel="whatsapp" if to.startswith("whatsapp:") else "sms",
                 kind="text", direction="out", author=who, body=f"[{label}] {text.strip()}",
@@ -274,24 +329,25 @@ async def _send_to_contact(summary_id: int, text: str, who: str, label: str) -> 
 
 
 @router.post("/summaries/{summary_id}/send-confirmation")
-async def send_confirmation(summary_id: int, text: str = Form(...), who: str = Depends(staff)):
-    thread, error = await _send_to_contact(summary_id, text, who, "Confirmation sent")
+async def send_confirmation(summary_id: int, text: str = Form(...), manual: str = Form(""),
+                            who: str = Depends(staff)):
+    thread, error = await _send_to_contact(summary_id, text, who, "Confirmation sent", manual == "1")
     if error:
         return _back(thread["id"], error=error)
     db.update_summary(summary_id, confirmation_sent_at=db.now())
-    return _back(thread["id"], msg="Confirmation sent. The contact's reply will appear in this thread.")
+    return _back(thread["id"], msg="Confirmation logged. Their reply will appear here." if manual == "1"
+                 else "Confirmation sent. Their reply will appear here.")
 
 
 @router.post("/summaries/{summary_id}/send-follow-up")
-async def send_follow_up(summary_id: int, text: str = Form(...), who: str = Depends(staff)):
+async def send_follow_up(summary_id: int, text: str = Form(...), manual: str = Form(""), who: str = Depends(staff)):
     """Ask the contact the missing profile questions. Their answers come back into this case and the next
     draft fills the gaps (and drops those questions from the list)."""
-    if not text.strip():
-        return _back(_summary_for(summary_id)["thread_id"], error="Nothing to send.")
-    thread, error = await _send_to_contact(summary_id, text, who, "Follow-up questions sent")
+    thread, error = await _send_to_contact(summary_id, text, who, "Follow-up questions sent", manual == "1")
     if error:
         return _back(thread["id"], error=error)
-    return _back(thread["id"], msg="Questions sent. Answers will appear in this thread and update the profile.")
+    return _back(thread["id"], msg="Questions logged. Answers will appear here and fill the profile." if manual == "1"
+                 else "Questions sent. Answers will appear here and fill the profile.")
 
 
 # ------------------------------------------------------------------ organising cases

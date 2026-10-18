@@ -174,9 +174,12 @@ def _key(need: dict) -> str:
     return f"{need.get('category')}:{_slug(need.get('description') or '')}"
 
 
-def approved_cases() -> list[dict]:
+def approved_cases(include_drafts: bool = False) -> list[dict]:
     """Every school case with an approved record (latest approved version).
 
+    include_drafts=True (the Schools tab): score each school from its newest draft instead, so the ranking moves
+    as soon as new messages change the picture, and schools still waiting for review are ranked too.
+    c["pending"] is then "new" (never approved) or "update" (newer draft than the approved one), else None.
     Needs already delivered are left out of the need score, so a school moves down the matrix once helped.
     """
     done = {(k["thread_id"], k["need_key"]) for k in db.list_tickets() if k["status"] in ("delivered", "checked")}
@@ -186,13 +189,19 @@ def approved_cases() -> list[dict]:
         if t["status"] in ("rejected", "not_relevant", "closed"):
             continue
         s = db.latest_approved_summary(t["id"])
+        pending = None
+        if include_drafts:
+            latest = db.latest_summary(t["id"])
+            if latest and latest["status"] == "draft" and (not s or latest["version"] > s["version"]):
+                pending = "update" if s else "new"
+                s = latest
         if not s or gaps.bank_for(s["data"]) != "school":
             continue
         data = s["data"]
         helped = [n for n in data.get("needs") or [] if (t["id"], _key(n)) in done]
         scored = {**data, "needs": [n for n in data.get("needs") or [] if n not in helped]}
         out.append({"thread": t, "summary": s, "data": data, "score": scoring.score_case(scored, cfg),
-                    "helped": [n["description"] for n in helped]})
+                    "helped": [n["description"] for n in helped], "pending": pending})
     return out
 
 
@@ -206,7 +215,7 @@ def school_names() -> dict[int, str]:
 
 
 def matrix_view() -> dict:
-    cases = approved_cases()
+    cases = approved_cases(include_drafts=True)
     tickets = db.list_tickets()
     for c in cases:
         mine = [k for k in tickets if k["thread_id"] == c["thread"]["id"]]
@@ -241,6 +250,25 @@ def ticket_matches(ticket: dict, ctx=None) -> dict:
     p["needs_shipping"] = any(c["abroad"] for c in p["picks"])
     p["shippers"] = matching.shippers(donors, items, trust) if p["needs_shipping"] else []
     return {"candidates": cands, "plan": p, "region": region, "links": t_links}
+
+
+def case_matches(thread_id: int) -> list[dict]:
+    """For the case page: each open need of this school with the best partners for it, ready to accept in one click."""
+    tickets = [k for k in db.list_tickets(thread_id=thread_id) if k["status"] in ("new", "matched")]
+    if not tickets:
+        return []
+    ctx = _context()
+    out = []
+    for k in tickets:
+        m = ticket_matches(k, ctx)
+        p = m["plan"]
+        if p["type"] == "covered":
+            continue
+        out.append({"ticket": k, "plan": p, "picks": p["picks"], "others": max(0, len(m["candidates"]) - len(p["picks"])),
+                    "exact": p["type"] in ("single", "combined", "partial")})
+    order = {"single": 0, "combined": 0, "partial": 1, "related": 2, "none": 3}
+    out.sort(key=lambda r: (order.get(r["plan"]["type"], 9), r["ticket"]["urgency"] != "critical"))
+    return out
 
 
 def coverage_view() -> dict:

@@ -1,48 +1,112 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}Inbox{% endblock %}
-{% block head %}<meta http-equiv="refresh" content="15">{% endblock %}
+{% block head %}<meta http-equiv="refresh" content="15">
+<style>
+.inbox-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.inbox-head h1 { margin: 0; flex: 1 1 auto; }
+.inbox-head form { flex: 0 1 320px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 18px; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line);
+  text-decoration: none; color: var(--ink); font-weight: 700; font-size: 14px; background: var(--panel); }
+.chip b { font-weight: 700; color: var(--muted); }
+.chip.on { background: var(--green); border-color: var(--green); color: #fff; } .chip.on b { color: #fff; }
+.chip.hot b { color: var(--warn); } .chip.on.hot b { color: #fff; }
+.more-filters { font-size: 13px; color: var(--muted); margin-left: auto; }
+.more-filters a { color: var(--muted); }
+.group-h { display: flex; align-items: baseline; gap: 8px; margin: 22px 0 8px; }
+.group-h h2 { margin: 0; font-size: 18px; }
+.group-h span { color: var(--muted); font-size: 13px; }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.conv { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 10px 16px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; text-decoration: none; color: var(--ink); }
+.conv:hover { border-color: var(--green); }
+.conv .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+.conv.s-draft_ready .dot { background: var(--yellow); } .conv.s-open .dot { background: #5b8def; }
+.conv.s-approved .dot { background: var(--green); } .conv.s-closed .dot, .conv.s-rejected .dot { background: var(--muted); }
+.conv .who { font-weight: 700; font-size: 17px; line-height: 1.25; }
+.conv .what { color: var(--ink); opacity: .85; font-size: 15px; margin-top: 1px; }
+.conv .meta { color: var(--muted); font-size: 13px; margin-top: 3px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.conv .meta .ic { vertical-align: -2px; }
+.conv .side { text-align: right; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.conv .when { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.conv .cta { font-size: 13px; font-weight: 700; padding: 5px 12px; border-radius: 999px; background: var(--yellow); color: #111; white-space: nowrap; }
+.conv .state { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.warnline { color: var(--bad); }
+.empty { padding: 28px; text-align: center; color: var(--muted); background: var(--panel); border: 1px dashed var(--line); border-radius: 12px; }
+@media (max-width: 640px) { .conv { grid-template-columns: 10px minmax(0, 1fr); } .conv .side { grid-column: 2; flex-direction: row; justify-content: space-between; align-items: center; } }
+</style>
+{% endblock %}
 {% block body %}
-<div class="row" style="align-items:center">
-  <h1 style="flex:2">Intake inbox</h1>
-  <div style="flex:0 0 auto"><a class="btn primary" href="/intake">Add intake</a></div>
+{% set LABEL = {"open": "Collecting", "draft_ready": "Ready to review", "approved": "Approved", "closed": "Closed", "rejected": "Rejected", "not_relevant": "Not relevant"} %}
+{% macro row(t) %}
+{% set name, need = (t.title|split_title) %}
+<a class="conv s-{{ t.status }}" href="/threads/{{ t.id }}">
+  <span class="dot" title="{{ LABEL[t.status] }}"></span>
+  <span>
+    <div class="who">{{ name or t.display_name or t.address }}</div>
+    {% if t.is_partner %}<div class="what">{{ "Offers help" if need == "offer" or not need else "Offers " ~ need }}</div>
+    {% elif need %}<div class="what">Needs {{ need }}</div>{% elif not t.title %}<div class="what muted">No summary yet</div>{% endif %}
+    <div class="meta">
+      {% if name and t.display_name and name not in t.display_name %}<span>{{ t.display_name }}</span>
+      {% elif name and t.display_name and "(" in t.display_name %}<span>{{ t.display_name.split("(")[0].strip() }}</span>{% endif %}
+      <span title="{{ t.kinds or '' }}">{{ ui.icon("message", 13) }} {{ t.item_count }}{% if t.kinds and 'audio' in t.kinds %} · voice{% endif %}{% if t.kinds and ('image' in t.kinds or 'video' in t.kinds) %} · photos{% endif %}</span>
+      <span>{{ t.case_number }}</span>
+      {% if t.pending_count %}<span>processing…</span>{% endif %}
+      {% if t.failed_count %}<span class="warnline">{{ t.failed_count }} failed</span>{% endif %}
+      {% if t.consent_status == 'opted_out' %}<span class="warnline">opted out</span>{% endif %}
+    </div>
+  </span>
+  <span class="side">
+    <span class="when">{{ t.last_item_at|ago }}</span>
+    {% if t.status == "draft_ready" %}<span class="cta">Review</span>
+    {% elif t.stale_summary %}<span class="cta">New messages</span>
+    {% else %}<span class="state">{{ LABEL[t.status] }}</span>{% endif %}
+  </span>
+</a>
+{% endmacro %}
+
+<div class="inbox-head">
+  <h1>Inbox</h1>
+  <form method="get" action="/" role="search"><input type="text" name="q" value="{{ q }}" placeholder="Search name, school, phone or case number" aria-label="Search the inbox">{% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}</form>
+  <a class="btn" href="/intake">+ Add</a>
 </div>
-<form method="get" action="/" class="row" style="margin-bottom:10px">
-  <div style="flex:3"><input type="text" name="q" value="{{ q }}" placeholder="Find a case: PS43-2026-0007, school name or phone number"></div>
-  <div style="flex:0 0 auto"><button type="submit">Search</button></div>
-</form>
-<p class="small">
-  <a href="/" {% if not status %}style="font-weight:700"{% endif %}>All</a> ·
-  <a href="/?status=draft_ready">Needs review ({{ counts.draft_ready }})</a> ·
-  <a href="/?status=open">Collecting ({{ counts.open }})</a> ·
-  <a href="/?status=approved">Approved ({{ counts.approved }})</a> ·
-  <a href="/?status=closed">Closed ({{ counts.closed }})</a> ·
-  <a href="/?status=rejected">Rejected ({{ counts.rejected }})</a> ·
-  <a href="/?status=not_relevant">Not relevant ({{ counts.not_relevant }})</a>
-</p>
-<div class="panel" style="padding:0; overflow-x:auto">
-{% if threads %}
-<table>
-  <thead><tr><th>Case</th><th>Contact</th><th>Summary</th><th>Status</th><th>What's in it</th><th>Last activity</th></tr></thead>
-  <tbody>
-  {% for t in threads %}
-  <tr class="clickable" onclick="location.href='/threads/{{ t.id }}'">
-    <td><a href="/threads/{{ t.id }}"><strong>{{ t.case_number }}</strong></a></td>
-    <td><strong>{{ t.display_name or t.address }}</strong><br>
-        <span class="muted small">{{ t.address }}{% if t.consent_status == 'opted_out' %} · opted out{% endif %}</span></td>
-    <td>{{ t.title or "—" }}{% if t.stale_summary %}<br><span class="badge b-held">new messages since draft</span>{% endif %}</td>
-    <td><span class="badge b-{{ t.status }}">{{ {"open":"collecting","draft_ready":"needs review","approved":"approved","closed":"closed","rejected":"rejected","not_relevant":"not relevant"}[t.status] }}</span></td>
-    <td>{{ t.item_count }} item{{ "" if t.item_count == 1 else "s" }}
-        {% if t.kinds %}<br><span class="small muted">{{ t.kinds.replace("audio", "voice/calls").replace(",", " · ") }}</span>{% endif %}
-        {% if t.pending_count %} <span class="muted small">({{ t.pending_count }} processing)</span>{% endif %}
-        {% if t.failed_count %}<br><span class="badge b-failed">{{ t.failed_count }} failed</span>{% endif %}</td>
-    <td class="small">{{ t.last_item_at[:16].replace("T", " ") }}</td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
+
+<div class="chips">
+  <a class="chip {{ 'on' if not status }}" href="/">All</a>
+  <a class="chip hot {{ 'on' if status == 'draft_ready' }}" href="/?status=draft_ready">To review <b>{{ counts.draft_ready }}</b></a>
+  <a class="chip {{ 'on' if status == 'open' }}" href="/?status=open">Collecting <b>{{ counts.open }}</b></a>
+  <a class="chip {{ 'on' if status == 'approved' }}" href="/?status=approved">Approved <b>{{ counts.approved }}</b></a>
+  <span class="more-filters">Also: <a href="/?status=closed">closed ({{ counts.closed }})</a> · <a href="/?status=rejected">rejected ({{ counts.rejected }})</a> · <a href="/?status=not_relevant">not relevant ({{ counts.not_relevant }})</a></span>
+</div>
+
+{% if not threads %}
+  <div class="empty">{% if q %}Nothing matches “{{ q }}”.{% else %}Nothing here yet. WhatsApp messages, calls and forms show up here on their own.{% endif %}</div>
+{% elif status or q %}
+  <div class="list">{% for t in threads %}{{ row(t) }}{% endfor %}</div>
 {% else %}
-<p style="padding:16px" class="muted">Nothing here yet. Messages to the PS43 WhatsApp/SMS number, calls, KoBo forms and uploads will appear here.
-  <a href="/intake">Upload an exported WhatsApp chat</a> to try it.</p>
+  {% set review = threads|selectattr("status", "equalto", "draft_ready")|list + threads|selectattr("status", "equalto", "approved")|selectattr("stale_summary")|list %}
+  {% set review_ids = review|map(attribute="id")|list %}
+  {% set collecting = threads|selectattr("status", "equalto", "open")|list %}
+  {% set rest = threads|rejectattr("id", "in", review_ids)|rejectattr("status", "equalto", "open")|list %}
+  {% set partners = rest|selectattr("is_partner")|list %}
+  {% set partner_ids = partners|map(attribute="id")|list %}
+  {% set rest = rest|rejectattr("id", "in", partner_ids)|list %}
+  {% if review %}
+  <div class="group-h"><h2>Needs you</h2><span>AI draft ready: check it and approve</span></div>
+  <div class="list">{% for t in review %}{{ row(t) }}{% endfor %}</div>
+  {% endif %}
+  {% if collecting %}
+  <div class="group-h"><h2>New conversations</h2><span>still collecting messages</span></div>
+  <div class="list">{% for t in collecting %}{{ row(t) }}{% endfor %}</div>
+  {% endif %}
+  {% if rest %}
+  <div class="group-h"><h2>Schools</h2><span>{{ rest|length }}</span></div>
+  <div class="list">{% for t in rest %}{{ row(t) }}{% endfor %}</div>
+  {% endif %}
+  {% if partners %}
+  <div class="group-h"><h2>Partners</h2><span>{{ partners|length }} · their offers are on the <a href="/partners">Partners</a> page</span></div>
+  <div class="list">{% for t in partners %}{{ row(t) }}{% endfor %}</div>
+  {% endif %}
 {% endif %}
-</div>
 {% endblock %}
