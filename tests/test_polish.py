@@ -78,7 +78,7 @@ def test_today_impact_and_demo(client):
 
 
 def test_whatsapp_button_on_signup(client, monkeypatch):
-    assert "wa.me" not in client.get("/join").text  # no number set: no button
+    assert "wa.me/16479017011" in client.get("/join").text  # PS43 number by default
     monkeypatch.setattr(settings, "public_whatsapp", "+237 6 99 00 11 22")
     page = client.get("/join").text
     assert "https://wa.me/237699001122?text=Bonjour%20PS43" in page

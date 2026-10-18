@@ -67,7 +67,7 @@ class Settings:
     local_whisper_model: str = field(default_factory=lambda: os.getenv("LOCAL_WHISPER_MODEL", "small"))
 
     # The WhatsApp number shown on the public sign-up page, e.g. +237 6...
-    public_whatsapp: str = field(default_factory=lambda: os.getenv("PUBLIC_WHATSAPP", ""))
+    public_whatsapp: str = field(default_factory=lambda: os.getenv("PUBLIC_WHATSAPP") or "+16479017011")
     # If set, inbound calls are forwarded to this staff phone and the conversation is recorded.
     # If empty, callers leave a recorded message instead.
     max_voicemail_seconds: int = field(default_factory=lambda: _int("MAX_VOICEMAIL_SECONDS", 300))

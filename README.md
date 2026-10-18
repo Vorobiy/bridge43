@@ -137,7 +137,7 @@ coloured by box, and the regions with no request yet, where outreach should go.
 median days from first message to delivery, FCFA of over-priced quotes questioned, partners by trust, by region and
 type, confirmed stories, and cost per case from the unit prices entered in Settings.
 
-**Public sign-up**: a "Write on WhatsApp" button (set `PUBLIC_WHATSAPP`) for
+**Public sign-up**: a "Write on WhatsApp" button (+1 647 901 7011 by default; change it with `PUBLIC_WHATSAPP`) for
 voice notes and photos, and a shorter school form (details optional).
 
 **PS43 branding**: all screens and the public sign-up use the PS43 Brand Book colours (green #007A5E, yellow
