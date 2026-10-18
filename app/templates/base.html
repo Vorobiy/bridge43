@@ -4,6 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try { if (localStorage.getItem("nav") === "small") document.documentElement.classList.add("nav-small"); } catch (e) {}</script>
 <title>{% block title %}Bridge43{% endblock %} · PS43 Bridge</title>
 <link rel="icon" type="image/png" href="/static/brand/favicon.png">
 {% block head %}{% endblock %}
@@ -28,6 +29,28 @@
 body { margin: 0; font: 16px/1.5 var(--text); background: var(--bg); color: var(--ink); }
 a { color: var(--accent); }
 main { max-width: 1280px; margin: 0 auto; padding: 20px; }
+/* collapsed sidebar: icons only */
+.sidenav > .brand + .nav-toggle { position: absolute; top: 26px; right: 12px; }
+.nav-toggle { background: transparent; border: 0; color: rgba(255,255,255,.85); padding: 6px; border-radius: 8px; cursor: pointer; line-height: 0; }
+.nav-toggle:hover { background: rgba(255,255,255,.12); color: #fff; }
+.shell { transition: grid-template-columns .18s ease; }
+@media (prefers-reduced-motion: reduce) { .shell { transition: none; } }
+@media (min-width: 901px) {
+  .nav-small .shell { grid-template-columns: 76px minmax(0, 1fr); }
+  .nav-small .sidenav { padding: 18px 10px; align-items: center; }
+  .nav-small .sidenav .lbl { display: none; }
+  .nav-small .sidenav .brand { padding: 0; flex: 0 0 auto; }
+  .nav-small .sidenav .brand img { height: 34px; }
+  .nav-small .sidenav > .brand + .nav-toggle { position: static; transform: scaleX(-1); }
+  .nav-small .sidenav nav { align-items: center; }
+  .nav-small .sidenav nav a { padding: 10px; justify-content: center; border-left-width: 0; }
+  .nav-small .sidenav nav a.on { box-shadow: inset 0 -3px 0 var(--yellow); }
+  .nav-small .sidenav form.search input { width: 44px; padding: 7px 0 7px 0; color: transparent; cursor: pointer; }
+  .nav-small .sidenav form.search input::placeholder { color: transparent; }
+  .nav-small .sidenav form.search .ic { left: 14px; pointer-events: none; }
+  .nav-small .sidenav .foot { width: 100%; }
+}
+@media (max-width: 900px) { .nav-toggle { display: none; } }
 /* side navigation */
 .shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 100vh; }
 .sidenav { position: sticky; top: 0; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px;
@@ -223,11 +246,12 @@ details > summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
 <body>
 <div class="shell">
 <aside class="sidenav">
-  <a class="brand" href="/today"><img src="/static/brand/ps43-logo-white.png" alt="PS43 Foundation"><span>Bridge</span></a>
+  <a class="brand" href="/today"><img src="/static/brand/ps43-logo-white.png" alt="PS43 Foundation"><span class="lbl">Bridge</span></a>
+  <button type="button" class="nav-toggle" id="navtoggle" aria-label="Collapse menu" aria-expanded="true" title="Collapse menu">{{ ui.icon("collapse", 20) }}</button>
   {% set here = request.url.path %}
   <form class="search" method="get" action="/search" role="search">{{ ui.icon("search", 15) }}<input type="text" name="q" value="{{ request.query_params.get('q', '') if here.startswith('/search') else '' }}" placeholder="Find a school, partner, case…" aria-label="Search"></form>
-  <nav aria-label="Main"><a href="/today" class="{{ 'on' if here.startswith('/today') }}">{{ ui.icon("today") }}Today</a><a href="/" class="{{ 'on' if here == '/' or here.startswith('/threads') or here.startswith('/intake') }}">{{ ui.icon("inbox") }}Inbox</a><a href="/dashboard" class="{{ 'on' if here.startswith('/dashboard') }}">{{ ui.icon("school") }}Schools</a><a href="/tickets" class="{{ 'on' if here.startswith('/tickets') or here.startswith('/matches') }}">{{ ui.icon("needs") }}Needs</a><a href="/partners" class="{{ 'on' if here.startswith('/partners') }}">{{ ui.icon("partners") }}Partners</a><a href="/impact" class="{{ 'on' if here.startswith('/impact') }}">{{ ui.icon("impact") }}Impact</a></nav>
-  <nav class="foot" aria-label="More"><a href="/settings" class="{{ 'on' if here.startswith('/settings') }}" title="Settings">{{ ui.icon("settings") }}<span class="lbl">Settings</span></a><a href="/join" target="_blank">Sign-up page ↗</a></nav>
+  <nav aria-label="Main"><a href="/today" class="{{ 'on' if here.startswith('/today') }}" title="Today">{{ ui.icon("today") }}<span class="lbl">Today</span></a><a href="/" class="{{ 'on' if here == '/' or here.startswith('/threads') or here.startswith('/intake') }}" title="Inbox">{{ ui.icon("inbox") }}<span class="lbl">Inbox</span></a><a href="/dashboard" class="{{ 'on' if here.startswith('/dashboard') }}" title="Schools">{{ ui.icon("school") }}<span class="lbl">Schools</span></a><a href="/tickets" class="{{ 'on' if here.startswith('/tickets') or here.startswith('/matches') }}" title="Needs">{{ ui.icon("needs") }}<span class="lbl">Needs</span></a><a href="/partners" class="{{ 'on' if here.startswith('/partners') }}" title="Partners">{{ ui.icon("partners") }}<span class="lbl">Partners</span></a><a href="/impact" class="{{ 'on' if here.startswith('/impact') }}" title="Impact">{{ ui.icon("impact") }}<span class="lbl">Impact</span></a></nav>
+  <nav class="foot" aria-label="More"><a href="/settings" class="{{ 'on' if here.startswith('/settings') }}" title="Settings">{{ ui.icon("settings") }}<span class="lbl">Settings</span></a><a href="/join" target="_blank" title="Sign-up page">{{ ui.icon("arrow") }}<span class="lbl">Sign-up page ↗</span></a></nav>
 </aside>
 <main>
 {% if demo_data %}<div class="flash small" style="background:var(--info-soft)"><strong>Demo data.</strong> Every school, person and partner shown here is made up, to show how PS43 would use Bridge.</div>
@@ -235,5 +259,20 @@ details > summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
 {% block body %}{% endblock %}
 </main>
 </div>
+<script>
+(function () {
+  const root = document.documentElement, btn = document.getElementById("navtoggle");
+  function set(small) {
+    root.classList.toggle("nav-small", small);
+    btn.setAttribute("aria-expanded", small ? "false" : "true");
+    btn.title = btn.ariaLabel = small ? "Expand menu" : "Collapse menu";
+    try { localStorage.setItem("nav", small ? "small" : "big"); } catch (e) {}
+  }
+  if (btn) { set(root.classList.contains("nav-small")); btn.addEventListener("click", () => set(!root.classList.contains("nav-small"))); }
+  // in the small menu, the search icon opens the menu and puts the cursor in the box
+  const q = document.querySelector(".sidenav form.search input");
+  if (q) q.addEventListener("focus", () => { if (root.classList.contains("nav-small") && window.innerWidth > 900) set(false); });
+})();
+</script>
 </body>
 </html>
