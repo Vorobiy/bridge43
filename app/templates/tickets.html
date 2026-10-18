@@ -3,40 +3,66 @@
 {% block title %}Needs{% endblock %}
 {% block head %}
 <style>
-.board .card { padding: 9px 11px; }
-.board .card .school { font-weight: 700; font-size: 14.5px; text-decoration: none; color: var(--ink); display: block; line-height: 1.25; }
-.board .card .school:hover { color: var(--accent); }
-.board .card .need { font-size: 13.5px; margin-top: 2px; }
-.board .card .foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
-.board .card .foot form { margin-left: auto; } .board .card .foot button { padding: 3px 10px; font-size: 12.5px; }
-.board .col h3 { display: flex; justify-content: space-between; }
+.lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .lanes { grid-template-columns: 1fr; } }
+.lane { background: var(--bg); border: 1px solid var(--line); border-radius: 16px; padding: 12px; }
+.lane-h { display: flex; align-items: baseline; gap: 10px; margin: 2px 4px 12px; }
+.lane-h h2 { margin: 0; font-size: 19px; }
+.lane-h strong { font-size: 26px; line-height: 1; color: var(--lc); }
+.lane-h span { color: var(--muted); font-size: 13px; margin-left: auto; }
+.lane.waiting { --lc: var(--bad); } .lane.moving { --lc: var(--warn); } .lane.done { --lc: var(--accent); }
+.nc { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: start; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+.nc:hover { border-color: var(--green); }
+.nc a.t { display: block; font-weight: 700; font-size: 15.5px; color: var(--ink); text-decoration: none; line-height: 1.25; }
+.nc .school { font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+.nc .st { font-size: 13.5px; margin-top: 6px; }
+.nc .acts { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.nc .acts button, .nc .acts .btn { padding: 5px 12px; font-size: 13.5px; }
+.nc .bar { display: inline-block; width: 70px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; vertical-align: middle; margin-right: 6px; }
+.nc .bar i { display: block; height: 100%; background: var(--green); }
+.urgent { color: var(--bad); font-weight: 700; }
+.lane .more { display: block; text-align: center; font-size: 13.5px; padding: 6px; }
+.lane .none { color: var(--muted); font-size: 14px; padding: 8px 4px; margin: 0; }
 </style>
 {% endblock %}
 {% block body %}
 {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
 {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
-<div class="row" style="align-items:center"><h1 style="margin-bottom:10px; flex:3">Needs</h1>
-  <div style="flex:0 0 auto"><a class="btn" href="/matches">Needs vs. partner offers</a></div></div>
-<div class="board">
-{% for status, items in cols.items() %}
-  <div class="col" id="col-{{ status }}">
-    <h3>{{ status_labels[status] }} <span class="muted">{{ items|length }}</span></h3>
-    {% for k in (items[:6] if status == "checked" else items) %}
-    <div class="card">
-      <a class="school" href="/tickets/{{ k.id }}" style="display:flex; gap:8px; align-items:center">{{ ui.avatar(k.display_name or k.school, "/avatar/contact/" ~ k.contact_id if k.avatar_path else None, 26) }}<span>{{ k.school }}</span></a>
-      <div class="need">{{ category_labels.get(k.category, k.category)|capitalize }}{% if k.quantity_text %} · {{ k.quantity_text }}{% endif %}</div>
-      <div class="foot">
-        {% if k.urgency in ("critical", "high") and status not in ("checked",) %}<span class="badge b-{{ k.urgency }}">{{ k.urgency }}</span>{% endif %}
-        {% if k.partners %}<span class="small muted">{{ k.partners|join(", ") }}</span>
-        {% elif k.plan_type and status == "new" %}<span class="badge b-{{ k.plan_type }}">{{ plan_labels[k.plan_type] }}</span>{% endif %}
-        {% if status == "new" and k.plan_type in ("single", "combined") %}
-          <form method="post" action="/tickets/{{ k.id }}/assign-plan"><input type="hidden" name="back" value="/tickets"><button class="primary" type="submit">Confirm</button></form>
+<div class="row" style="align-items:center">
+  <div style="flex:3"><h1 style="margin-bottom:2px">Needs</h1>
+    <p class="muted" style="margin:0">Every school need, from finding a partner to the school saying it arrived.</p></div>
+  <div style="flex:0 0 auto"><a class="btn" href="/matches">Needs and partner offers side by side</a></div>
+</div>
+
+<div class="lanes" style="margin-top:16px">
+{% for key, title, hint in [("waiting", "Needs a partner", "match them"), ("moving", "On its way", "partner found, work underway"), ("done", "Done", "confirmed by the school")] %}
+{% set items = lanes[key] %}
+  <section class="lane {{ key }}" id="lane-{{ key }}" aria-labelledby="h-{{ key }}">
+    <div class="lane-h"><strong>{{ items|length }}</strong><h2 id="h-{{ key }}">{{ title }}</h2><span>{{ hint }}</span></div>
+    {% for k in (items[:5] if key == "done" else items) %}
+    <article class="nc">
+      {{ ui.need_art(k.category, 44) }}
+      <div>
+        <a class="t" href="/tickets/{{ k.id }}">{{ category_labels.get(k.category, k.category)|capitalize }}{% if k.quantity_text %}, {{ k.quantity_text }}{% endif %}</a>
+        <div class="school">{{ k.school }}</div>
+        {% if key == "waiting" %}
+          <div class="st">{% if k.urgency in ("critical", "high") %}<span class="urgent">{{ k.urgency|capitalize }}.</span> {% endif %}{% if k.plan_type in ("single", "combined") %}A partner can cover it.{% elif k.plan_type == "partial" %}Partly covered by a partner.{% elif k.plan_type == "related" %}Only related help so far.{% else %}No partner offers this yet.{% endif %}</div>
+          <div class="acts">
+            {% if k.plan_type in ("single", "combined") %}<form method="post" action="/tickets/{{ k.id }}/assign-plan"><input type="hidden" name="back" value="/tickets"><button class="primary" type="submit">Confirm partner</button></form>{% endif %}
+            <a class="btn" href="/tickets/{{ k.id }}">{{ "Look" if k.plan_type in ("single", "combined") else "Find a partner" }}</a>
+          </div>
+        {% elif key == "moving" %}
+          <div class="st">{% if k.status == "delivered" %}<b>Delivered.</b> Ask the school to confirm.{% elif k.status == "matched" %}<b>Partner found:</b> {{ k.partners|join(", ") }}{% else %}<span class="bar"><i style="width:{{ (100 * k.done / k.total)|round|int if k.total else 0 }}%"></i></span>{{ k.done }} of {{ k.total }} steps{% if k.partners %}, {{ k.partners|join(", ") }}{% endif %}{% endif %}</div>
+          <div class="acts"><a class="btn {{ 'primary' if k.status == 'delivered' }}" href="/tickets/{{ k.id }}">{{ "Confirm" if k.status == "delivered" else "Open" }}</a></div>
+        {% else %}
+          <div class="st muted">{% if k.partners %}With {{ k.partners|join(", ") }}. {% endif %}{{ (k.delivered_at or "")|ago|capitalize }}.</div>
         {% endif %}
       </div>
-    </div>
-    {% else %}<p class="small muted" style="margin:4px">Empty.</p>{% endfor %}
-    {% if status == "checked" and items|length > 6 %}<a class="small" href="/impact">{{ items|length - 6 }} more on Impact →</a>{% endif %}
-  </div>
+    </article>
+    {% else %}<p class="none">{{ {"waiting": "Every need has a partner.", "moving": "Nothing on its way right now.", "done": "Nothing confirmed yet."}[key] }}</p>{% endfor %}
+    {% if key == "done" and items|length > 5 %}<a class="more" href="/impact">See all {{ items|length }} on Impact</a>{% endif %}
+  </section>
 {% endfor %}
 </div>
 {% endblock %}

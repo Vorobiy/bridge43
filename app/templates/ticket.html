@@ -1,134 +1,103 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
-{% block title %}{{ t.description }}<script>
-(function () {
-  const sel = document.getElementById("to"), box = document.getElementById("mt"), wa = document.getElementById("wa"), sms = document.getElementById("smsl");
-  if (!sel) return;
-  function sync() {
-    const o = sel.selectedOptions[0], phone = (o.dataset.phone || "").replace(/[^0-9+]/g, ""), t = encodeURIComponent(box.value);
-    wa.style.display = sms.style.display = phone ? "" : "none";
-    wa.href = "https://wa.me/" + phone.replace("+", "") + "?text=" + t; sms.href = "sms:" + phone + "?&body=" + t;
-  }
-  sel.addEventListener("change", () => { const o = sel.selectedOptions[0]; if (o.dataset.text) box.value = o.dataset.text; sync(); });
-  box.addEventListener("input", sync); sync();
-})();
-</script>
+{% block title %}{{ t.description }}{% endblock %}
+{% block head %}
+<style>
+.case-top { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin: 4px 0 14px; }
+.case-top .who { flex: 1 1 420px; min-width: 0; display: flex; gap: 16px; align-items: center; }
+.case-top .who > div { min-width: 0; }
+.case-top h1 { margin: 0 0 6px; font-size: 32px; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: 15px; align-items: center; }
+.state { font-size: 13px; font-weight: 700; padding: 3px 11px; border-radius: 999px; background: var(--info-soft); color: var(--ink); }
+.state.s-checked { background: var(--green); color: #fff; } .state.s-delivered { background: var(--yellow); color: #111; }
+.state.s-new { background: var(--bad-soft); color: var(--bad); } .state.s-cancelled { background: var(--line); color: var(--muted); }
+.menu-wrap { position: relative; }
+.menu-wrap > summary { list-style: none; margin: 0; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-weight: 600; cursor: pointer; }
+.menu-wrap > summary::-webkit-details-marker { display: none; }
+.menu-wrap .menu { position: absolute; right: 0; top: 46px; z-index: 6; width: 280px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.22); }
+.rail { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 0 0 18px; padding: 0; }
+.rail li { list-style: none; position: relative; padding-top: 22px; font-size: 13px; color: var(--muted); text-align: center; }
+.rail li::before { content: ""; position: absolute; top: 6px; left: 0; right: 0; height: 4px; background: var(--line); }
+.rail li:first-child::before { left: 50%; } .rail li:last-child::before { right: 50%; }
+.rail li::after { content: ""; position: absolute; top: 0; left: 50%; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%;
+  background: var(--panel); border: 3px solid var(--line); box-sizing: border-box; }
+.rail li.done::before, .rail li.now::before { background: var(--green); }
+.rail li.done::after { background: var(--green); border-color: var(--green); }
+.rail li.now::after { background: var(--yellow); border-color: var(--green); width: 20px; height: 20px; margin-left: -10px; top: -2px; }
+.rail li.now { color: var(--ink); font-weight: 700; }
+@media (max-width: 640px) { .rail li { font-size: 0; } .rail li.now { font-size: 12px; } }
+.next { border: 2px solid var(--green); }
+.who-row { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.who-row:first-child { border-top: 0; }
+.who-row .grow { flex: 1; min-width: 0; }
+.who-row .s { font-size: 13.5px; color: var(--muted); }
+.stepper .what { font-size: 15px; }
+.compose .row2 { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.compose .row2 .grow { flex: 1; }
+</style>
 {% endblock %}
 {% block body %}
-<p class="small" style="margin:0 0 6px"><a href="/threads/{{ t.thread_id }}">← {{ score.name if score else (t.display_name or t.case_title) }}</a> · <a href="/tickets">All needs</a></p>
-{% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
-{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
-{{ ui.journey(stage) }}
+{% set school = score.name if score else (t.display_name or t.case_title) %}
+<p class="small" style="margin:0"><a href="/threads/{{ t.thread_id }}">← {{ school }}</a></p>
+{% if msg %}<div class="flash ok" style="margin-top:10px">{{ msg }}</div>{% endif %}
+{% if error %}<div class="flash err" style="margin-top:10px">{{ error }}</div>{% endif %}
 
-<div class="panel">
-  <div class="row" style="align-items:flex-start">
-    <div style="flex:3">
-      <span class="badge b-{{ t.status }}">{{ status_labels[t.status] }}</span>
-      {% if t.urgency != "unknown" %}<span class="badge b-{{ t.urgency }}">{{ t.urgency }} urgency</span>{% endif %}
-      <span class="pill">{{ category_labels.get(t.category, t.category) }}</span>
-      <h1 style="margin:8px 0 4px">{{ t.description }}{% if t.quantity_text %} <span class="muted">· {{ t.quantity_text }}</span>{% endif %}</h1>
-      <p class="muted" style="margin:0">For <a href="/threads/{{ t.thread_id }}">{{ score.name if score else (t.display_name or t.case_title) }}</a>
-        {% if score %}· {{ [score.town, score.region]|select|join(", ") }}{% if score.students %} · {{ score.students }} pupils{% endif %}
-        {% if t.status not in ("checked", "cancelled") %}· <span class="badge q-{{ score.quadrant }}" style="background:var(--q); color:var(--qt)">{{ score.quadrant_label }}</span>{% endif %}{% endif %}
-        · {{ t.case_number }}</p>
-
+<div class="case-top">
+  <div class="who">
+    {{ ui.need_art(t.category, 64) }}
+    <div>
+      <h1>{{ category_labels.get(t.category, t.category)|capitalize }}{% if t.quantity_text %}, {{ t.quantity_text }}{% endif %}</h1>
+      <div class="facts">
+        <span class="state s-{{ t.status }}">{{ status_labels[t.status] }}</span>
+        <a href="/threads/{{ t.thread_id }}">{{ school }}</a>
+        {% if score %}{% if score.town or score.region %}<span>{{ [score.town, score.region]|select|join(", ") }}</span>{% endif %}{% if score.students %}<span>{{ score.students }} pupils</span>{% endif %}{% endif %}
+        {% if t.urgency in ("critical", "high") %}<span style="color:var(--bad); font-weight:700">{{ t.urgency|capitalize }}</span>{% endif %}
+      </div>
     </div>
-    <details style="flex:0 0 220px"><summary class="small muted">Change status by hand</summary>
-    <form method="post" action="/tickets/{{ t.id }}/status" class="row" style="align-items:flex-end">
-      <div><select id="st" name="status" aria-label="Status">{% for s in statuses %}<option value="{{ s }}" {% if s == t.status %}selected{% endif %}>{{ status_labels[s] }}</option>{% endfor %}</select></div>
-      <div style="flex:0 0 auto"><button type="submit">Set</button></div>
-    </form></details>
   </div>
-</div>
-<div style="margin-top:16px">{{ ui.next_step(next) }}</div>
-
-<div class="grid2">
-<div>
-  <!-- partners on this need -->
-  <div class="panel">
-    <h2 style="margin-top:0">{{ ui.icon("partners") }} Partners</h2>
-    {% if linked %}
-    <table><thead><tr><th>Partner</th><th>Gives</th><th>Status</th><th></th></tr></thead><tbody>
-    {% for l in linked %}<tr><td><a href="/partners/{{ l.donor_id }}">{{ l.donor_name }}</a></td>
-      <td class="small">{% if l.quantity %}{{ (l.quantity)|qty }} × {% endif %}{{ l.item_description or "help" }}</td>
-      <td><span class="badge">{{ l.status }}</span></td>
-      <td>{% if l.status == "committed" %}<form class="inline" method="post" action="/tickets/{{ t.id }}/links/{{ l.id }}/cancel" onsubmit="return confirm('Cancel this commitment? It lowers the partner\'s trust.')"><button class="danger" type="submit">Cancel</button></form>{% endif %}</td></tr>
-    {% endfor %}</tbody></table>
-    {% else %}<p class="muted small">No partner yet.</p>{% endif %}
-
-    {% set p = m.plan %}
-    {% if t.status in ("new", "matched") %}
-    <h3>Suggested: <span class="badge b-{{ p.type }}">{{ plan_labels[p.type] }}</span></h3>
-    {% if p.need_left %}<p class="small muted">Still needed: {{ (p.need_left)|qty }} {{ t.unit or "" }}{% if m.region %} in {{ m.region }}{% endif %}.</p>{% endif %}
-    {% if p.picks %}
-      <ul>{% for c in p.picks %}<li><strong>{{ c.donor_name }}</strong>: {{ c.item }}{% if c.covers %} — {{ (c.covers)|qty }}{% endif %}
-        <span class="badge b-{{ c.trust.level }}">{{ c.trust.level }} {{ c.trust.score }}</span>{% if c.abroad %} <span class="badge b-partial">abroad</span>{% endif %}</li>{% endfor %}</ul>
-      <form method="post" action="/tickets/{{ t.id }}/assign-plan"><button class="primary" type="submit">Use this plan</button></form>
-    {% endif %}
-    {% if p.needs_shipping %}
-      <div class="flash warn" style="margin-top:10px"><strong>Needs shipping into Cameroon.</strong>
-        {% if p.shippers %}Shipping partners: {% for s in p.shippers %}<a href="/partners/{{ s.donor_id }}">{{ s.donor_name }}</a> ({{ s.trust.level }}){% if not loop.last %}, {% endif %}{% endfor %}.
-        {% else %}No shipping partner in the database yet: add one on the Partners page.{% endif %}</div>
-    {% endif %}
-    {% endif %}
-  </div>
-
-  {% if m.candidates and t.status in ("new", "matched", "in_progress") %}
-  <details class="more-box" style="overflow-x:auto" {% if t.status == "new" and m.plan.type in ("none", "related") %}open{% endif %}>
-    <summary>{{ ui.icon("match") }} All possible partners ({{ m.candidates|length }})</summary>
-    <p class="small muted">What each partner has in common with this need: type of help, place, quantity and trust.</p>
-    <table><thead><tr><th>Partner and item</th><th>Match</th><th>Why</th><th></th></tr></thead><tbody>
-    {% for c in m.candidates %}
-    <tr><td><a href="/partners/{{ c.donor_id }}"><strong>{{ c.donor_name }}</strong></a><br><span class="small">{{ c.item }}{% if c.available %} · {{ (c.available)|qty }} {{ c.unit or "" }} left{% endif %}</span>
-        {% if c.conditions %}<br><span class="small muted">Conditions: {{ c.conditions }}</span>{% endif %}</td>
-      <td><strong>{{ c.score }}</strong><br><span class="badge b-{{ c.trust.level }}">{{ c.trust.level }}</span></td>
-      <td class="small">{{ c.reasons|join(" · ") }}</td>
-      <td><form method="post" action="/tickets/{{ t.id }}/assign" class="inline">
-        <input type="hidden" name="donor_id" value="{{ c.donor_id }}"><input type="hidden" name="item_id" value="{{ c.item_id }}">
-        <input type="text" name="quantity" value="{{ (c.covers)|qty if c.covers else '' }}" placeholder="qty" style="width:70px">
-        <button type="submit">Add</button></form></td></tr>
-    {% endfor %}</tbody></table>
-  </details>
-  {% endif %}
-
-  <!-- quotes -->
-  <details class="more-box" style="overflow-x:auto" {% if quotes %}open{% endif %}>
-    <summary>Quotes and price check ({{ quotes|length }})</summary>
-    <p class="small muted">Prices more than 25% above other quotes for the same thing are flagged.</p>
-    {% if quotes %}
-    <table><thead><tr><th>From</th><th>Total (FCFA)</th><th>Per unit</th><th>Check</th><th></th></tr></thead><tbody>
-    {% for q in quotes %}<tr>
-      <td>{{ q.who }}{% if q.chosen %} <span class="badge b-checked">chosen</span>{% endif %}{% if q.note %}<br><span class="small muted">{{ q.note }}</span>{% endif %}</td>
-      <td>{{ "{:,.0f}".format(q.amount) }}{% if q.quantity %}<br><span class="small muted">for {{ (q.quantity)|qty }} {{ q.unit or "" }}</span>{% endif %}</td>
-      <td>{% if q.check.unit_price %}{{ "{:,.0f}".format(q.check.unit_price) }}{% if q.check.median %}<br><span class="small muted">usual {{ "{:,.0f}".format(q.check.median) }}</span>{% endif %}{% else %}—{% endif %}</td>
-      <td><span class="badge b-{{ q.check.status }}" style="white-space:normal">{{ q.check.label }}</span></td>
-      <td>{% if not q.chosen %}<form class="inline" method="post" action="/tickets/{{ t.id }}/quotes/{{ q.id }}/choose"><button type="submit">Choose</button></form>{% endif %}</td>
-    </tr>{% endfor %}</tbody></table>
-    {% endif %}
-    <details><summary>Add a quote</summary>
-      <form method="post" action="/tickets/{{ t.id }}/quotes">
-        <div class="row">
-          <div><label>From a partner</label><select name="donor_id"><option value="">— not in the database —</option>{% for d in donors %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select></div>
-          <div><label>…or supplier name</label><input type="text" name="supplier_name"></div>
-        </div>
-        <div class="row">
-          <div><label>Total amount (FCFA)</label><input type="text" name="amount" required placeholder="1 200 000"></div>
-          <div><label>Quantity</label><input type="text" name="quantity" value="{{ (t.quantity_total)|qty if t.quantity_total else '' }}"></div>
-          <div><label>Unit</label><input type="text" name="unit" value="{{ t.unit or '' }}"></div>
-        </div>
-        <label>Note</label><input type="text" name="note" placeholder="e.g. includes transport and installation">
-        <p><button type="submit">Save quote</button></p>
+  <details class="menu-wrap"><summary>More</summary>
+    <div class="menu">
+      <form method="post" action="/tickets/{{ t.id }}/status">
+        <label for="st" style="margin-top:0">Change the status by hand</label>
+        <div class="row" style="gap:6px"><div style="flex:3"><select id="st" name="status">{% for s in statuses %}<option value="{{ s }}" {% if s == t.status %}selected{% endif %}>{{ status_labels[s] }}</option>{% endfor %}</select></div>
+        <div style="flex:0 0 auto"><button type="submit">Set</button></div></div>
       </form>
-    </details>
+    </div>
   </details>
 </div>
+<p class="muted" style="margin:-6px 0 14px; max-width:72ch">{{ t.description }}</p>
 
-<div>
-  <!-- steps -->
-  <div class="panel">
-    {% set n_done = steps|selectattr("done_at")|list|length %}
-    <h2 style="margin-top:0; display:flex; justify-content:space-between"><span>{{ ui.icon("deliver") }} Steps</span> <span class="small muted">{{ n_done }} of {{ steps|length }} done</span></h2>
-    {% if steps and n_done == steps|length %}<details><summary class="small">All done: show the steps</summary>{% endif %}
+{% if t.status != "cancelled" %}
+{% set pos = {"new": 0, "matched": 1, "in_progress": 2, "delivered": 3, "checked": 4}.get(t.status, 0) %}
+<ol class="rail" aria-label="Where this need stands">
+  {% for label in ["Find a partner", "Partner found", "Work underway", "Delivered", "School confirmed"] %}
+  <li class="{{ 'done' if loop.index0 < pos or t.status == 'checked' else ('now' if loop.index0 == pos else '') }}" {% if loop.index0 == pos %}aria-current="step"{% endif %}>{{ label }}</li>
+  {% endfor %}
+</ol>
+{% endif %}
+
+{% if next and next.label %}
+<div class="panel next" style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-bottom:6px">
+  <div style="flex:1 1 280px"><strong style="font-size:18px; display:block">{{ next.label }}</strong>{% if next.hint %}<span class="small muted">{{ next.hint }}</span>{% endif %}</div>
+  {% if next.action %}<form method="post" action="{{ next.action }}">{% for kk, vv in (next.fields or {}).items() %}<input type="hidden" name="{{ kk }}" value="{{ vv }}">{% endfor %}<button class="primary big-btn" type="submit">{{ next.button or "Do it" }}</button></form>
+  {% elif next.href and next.href.startswith("#") %}<button class="primary big-btn" type="button" data-goto="messages">{{ next.button or "Open" }}</button>
+  {% elif next.href %}<a class="btn primary big-btn" href="{{ next.href }}">{{ next.button or "Open" }}</a>{% endif %}
+</div>
+{% endif %}
+
+{% set n_done = steps|selectattr("done_at")|list|length %}
+<div class="ptabs" role="tablist">
+  <button role="tab" aria-selected="true" data-tab="steps">Steps<span class="n">{{ n_done }}/{{ steps|length }}</span></button>
+  <button role="tab" aria-selected="false" data-tab="partners">Partners<span class="n">{{ linked|length }}</span></button>
+  <button role="tab" aria-selected="false" data-tab="messages">Messages</button>
+  <button role="tab" aria-selected="false" data-tab="quotes">Quotes<span class="n">{{ quotes|length }}</span></button>
+  <button role="tab" aria-selected="false" data-tab="activity">Activity</button>
+</div>
+
+{# ---------------- steps ---------------- #}
+<section class="ppane" id="tab-steps">
+  <div class="panel" style="max-width:760px">
     {% set ns = namespace(current=None) %}
     {% for s in steps %}{% if not s.done_at and ns.current is none %}{% set ns.current = s.id %}{% endif %}{% endfor %}
     <ol class="stepper">
@@ -136,66 +105,158 @@
       <li class="{{ 'done' if s.done_at else ('now' if s.id == ns.current else 'later') }}">
         <span class="dot">{% if s.done_at %}{{ ui.icon("yes", 14) }}{% else %}{{ loop.index }}{% endif %}</span>
         <span class="what">{{ s.title }}
-          <span class="small muted">{% if s.done_at %}{{ s.done_at|ago }}{% if s.done_by %} · {{ s.done_by }}{% endif %}{% else %}{{ {"ps43": "PS43", "partner": "partner", "school": "school"}.get(s.owner, s.owner) }}{% if s.due %} · due {{ s.due }}{% endif %}{% endif %}</span></span>
+          <span class="small muted">{% if s.done_at %}Done {{ s.done_at|ago }}{% if s.done_by %} by {{ s.done_by }}{% endif %}{% else %}{{ {"ps43": "PS43", "partner": "The partner", "school": "The school"}.get(s.owner, s.owner) }}{% if s.due %}, by {{ s.due }}{% endif %}{% endif %}</span></span>
         {% if not s.done_at %}<form class="inline" method="post" action="/tickets/{{ t.id }}/steps/{{ s.id }}/done">
           <button type="submit" {% if s.id == ns.current %}class="primary"{% endif %}>Done</button></form>{% endif %}
       </li>
-    {% endfor %}
+    {% else %}<li class="muted">No steps.</li>{% endfor %}
     </ol>
-    {% if steps and n_done == steps|length %}</details>{% endif %}
-    {% if t.status not in ("checked", "cancelled") %}<details><summary>Add a step</summary>
+    {% if t.status not in ("checked", "cancelled") %}<details><summary class="small">Add a step</summary>
       <form method="post" action="/tickets/{{ t.id }}/steps" class="row" style="align-items:flex-end">
-        <div style="flex:3"><label>Step</label><input type="text" name="title" required></div>
-        <div><label>Who</label><select name="owner"><option>ps43</option><option>partner</option><option>school</option></select></div>
-        <div><label>Due</label><input type="text" name="due" placeholder="2026-11-15"></div>
+        <div style="flex:3"><label for="sti">Step</label><input id="sti" type="text" name="title" required></div>
+        <div><label for="sto">Who</label><select id="sto" name="owner"><option value="ps43">PS43</option><option value="partner">Partner</option><option value="school">School</option></select></div>
+        <div><label for="std">By</label><input id="std" type="text" name="due" placeholder="2026-11-15"></div>
         <div style="flex:0 0 auto"><button type="submit">Add</button></div>
       </form>
     </details>{% endif %}
   </div>
+</section>
 
-  <!-- messages -->
-  <details class="panel" style="margin-top:16px" id="message" {% if t.status not in ("checked", "cancelled") %}open{% endif %}>
-    <summary style="margin:0"><h2 style="margin:0; display:inline">{{ ui.icon("message") }} Message</h2></summary>
+{# ---------------- partners ---------------- #}
+<section class="ppane" id="tab-partners" hidden>
+<div class="grid2">
+  <div class="panel">
+    <h2 style="margin-top:0">On this need</h2>
+    {% for l in linked %}
+    <div class="who-row">
+      {{ ui.avatar(l.donor_name, "/partners/" ~ l.donor_id ~ "/logo", 36, True) }}
+      <div class="grow"><a href="/partners/{{ l.donor_id }}"><b>{{ l.donor_name }}</b></a>
+        <div class="s">{% if l.quantity %}{{ (l.quantity)|qty }} × {% endif %}{{ l.item_description or "help" }}. {{ {"committed": "Committed", "delivered": "Delivered", "completed": "Confirmed by the school"}.get(l.status, l.status) }}.</div></div>
+      {% if l.status == "committed" %}<form method="post" action="/tickets/{{ t.id }}/links/{{ l.id }}/cancel" onsubmit="return confirm('Cancel this commitment? It lowers the partner\'s trust.')"><button class="danger" type="submit">Cancel</button></form>{% endif %}
+    </div>
+    {% else %}<p class="muted" style="margin:0">No partner yet.</p>{% endfor %}
+    {% set p = m.plan %}
+    {% if p.needs_shipping %}<div class="flash warn" style="margin:12px 0 0"><strong>Needs shipping into Cameroon.</strong>
+      {% if p.shippers %}Shipping partners: {% for s in p.shippers %}<a href="/partners/{{ s.donor_id }}">{{ s.donor_name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}.{% else %}No shipping partner yet.{% endif %}</div>{% endif %}
+  </div>
+  <div class="panel">
+    {% set good = t.status in ("new", "matched") and p.picks and p.type in ("single", "combined", "partial") %}
+    {% if good %}
+    <h2 style="margin-top:0">Suggested</h2>
+    {% for c in p.picks %}
+    <div class="who-row">{{ ui.avatar(c.donor_name, "/partners/" ~ c.donor_id ~ "/logo", 36, True) }}
+      <div class="grow"><a href="/partners/{{ c.donor_id }}"><b>{{ c.donor_name }}</b></a><div class="s">{{ c.item }}{% if c.covers %}, gives {{ (c.covers)|qty }}{% endif %}{% if c.abroad %}, abroad{% endif %}. Trust: {{ c.trust.level }}.</div></div></div>
+    {% endfor %}
+    <form method="post" action="/tickets/{{ t.id }}/assign-plan" style="margin-top:8px"><button class="primary" type="submit">Use this match</button></form>
+    {% endif %}
+    {% if m.candidates and t.status in ("new", "matched", "in_progress") %}
+    <h2 style="margin-top:{{ '18px' if good else '0' }}">{{ "Others who could help" if good else ("Partners with related help" if p.type == "related" else "Partners who could help") }}</h2>
+    {% for c in m.candidates %}
+    <div class="who-row">{{ ui.avatar(c.donor_name, "/partners/" ~ c.donor_id ~ "/logo", 30, True) }}
+      <div class="grow"><a href="/partners/{{ c.donor_id }}"><b>{{ c.donor_name }}</b></a> <span class="small muted">fit {{ c.score }}</span>
+        <div class="s">{{ c.item }}{% if c.available %}, {{ (c.available)|qty }} {{ c.unit or "" }} left{% endif %}. {{ c.reasons[:2]|join(", ")|capitalize }}.</div></div>
+      <form method="post" action="/tickets/{{ t.id }}/assign" style="display:flex; gap:6px">
+        <input type="hidden" name="donor_id" value="{{ c.donor_id }}"><input type="hidden" name="item_id" value="{{ c.item_id }}">
+        <input type="text" name="quantity" value="{{ (c.covers)|qty if c.covers else '' }}" placeholder="How many" aria-label="How many" style="width:90px">
+        <button type="submit">Add</button></form>
+    </div>
+    {% endfor %}
+    {% elif not good %}<p class="muted" style="margin:0">No partner offers this right now. <a href="/partners">See all partners</a>.</p>{% endif %}
+  </div>
+</div>
+</section>
+
+{# ---------------- messages ---------------- #}
+<section class="ppane" id="tab-messages" hidden>
+<div class="grid2">
+  <div class="panel compose" id="message">
+    <h2 style="margin-top:0">Write to the partner or the school</h2>
     <form method="post" action="/tickets/{{ t.id }}/message" id="msgform">
       <select id="to" name="to" aria-label="To">
         {% for d in donors if d.contact_id %}<option value="{{ d.id }}" data-text="{{ partner_texts[d.id] }}" data-phone="{{ phones.get(d.contact_id) or '' }}" {% if d.id == partner_default %}selected{% endif %}>To partner: {{ d.name }}</option>{% endfor %}
-        <option value="school" data-text="{{ school_text }}" data-phone="{{ phones.get(t.contact_id) or '' }}" {% if not partner_default %}selected{% endif %}>To school: {{ t.display_name or t.case_title }}</option>
+        <option value="school" data-text="{{ school_text }}" data-phone="{{ phones.get(t.contact_id) or '' }}" {% if not partner_default %}selected{% endif %}>To the school: {{ school }}</option>
       </select>
-      <textarea id="mt" name="text" rows="5" style="margin-top:8px">{{ partner_text if partner_default else school_text }}</textarea>
-      <div class="actions" style="margin-top:8px">
+      <textarea id="mt" name="text" rows="6" style="margin-top:8px" aria-label="Message">{{ partner_text if partner_default else school_text }}</textarea>
+      <div class="row2">
         <a class="btn primary" id="wa" href="#" target="_blank" rel="noopener">Open in WhatsApp</a>
         <a class="btn" id="smsl" href="#">Open in SMS</a>
-        <span style="flex:1"></span>
+        <span class="grow"></span>
         <button type="submit" name="manual" value="1">I sent it ✓</button>
       </div>
     </form>
-    <form method="post" action="/tickets/{{ t.id }}/note" class="row" style="align-items:flex-end">
-      <div style="flex:3"><input type="text" name="text" placeholder="Add a note: call, visit, decision…" aria-label="Note"></div>
-      <div style="flex:0 0 auto"><button type="submit">Add note</button></div>
+  </div>
+  <div class="panel">
+    <h2 style="margin-top:0">Add a note</h2>
+    <form method="post" action="/tickets/{{ t.id }}/note">
+      <textarea name="text" rows="3" placeholder="A call, a visit, a decision…" aria-label="Note"></textarea>
+      <p style="margin-bottom:0"><button type="submit">Add note</button></p>
     </form>
-  </details>
-
-  <!-- activity -->
-  <div class="panel" style="margin-top:16px">
-    <h2 style="margin-top:0">Activity</h2>
-    {% set evs = events|reverse|list %}
-    <ul class="log">
-    {% for e in evs[:6] %}<li><span class="when">{{ e.at|ago }}{% if e.who %} · {{ e.who }}{% endif %}</span><br>{{ e.text|truncate(160) }}</li>
-    {% else %}<li class="muted">Nothing yet.</li>{% endfor %}
-    </ul>
-    {% if evs|length > 6 %}<details><summary class="small">{{ evs|length - 6 }} older</summary><ul class="log">
-    {% for e in evs[6:] %}<li><span class="when">{{ e.at|ago }}{% if e.who %} · {{ e.who }}{% endif %}</span><br>{{ e.text|truncate(160) }}</li>{% endfor %}</ul></details>{% endif %}
-    {% if followups %}<h3>Follow-ups</h3><ul>{% for f in followups %}<li>{{ f.days }} days: due {{ f.due_on }}{% if f.sent_at %} · sent {{ f.sent_at[:10] }}{% endif %}</li>{% endfor %}</ul>{% endif %}
   </div>
 </div>
-</div>
+</section>
+
+{# ---------------- quotes ---------------- #}
+<section class="ppane" id="tab-quotes" hidden>
+  <div class="panel" style="overflow-x:auto">
+    <p class="small muted" style="margin-top:0">A price more than 25% above other quotes for the same thing is flagged.</p>
+    {% if quotes %}
+    <table><thead><tr><th>From</th><th>Total (FCFA)</th><th>Per unit</th><th>Check</th><th></th></tr></thead><tbody>
+    {% for q in quotes %}<tr>
+      <td>{{ q.who }}{% if q.chosen %} <span class="badge b-checked">chosen</span>{% endif %}{% if q.note %}<br><span class="small muted">{{ q.note }}</span>{% endif %}</td>
+      <td>{{ "{:,.0f}".format(q.amount) }}{% if q.quantity %}<br><span class="small muted">for {{ (q.quantity)|qty }} {{ q.unit or "" }}</span>{% endif %}</td>
+      <td>{% if q.check.unit_price %}{{ "{:,.0f}".format(q.check.unit_price) }}{% if q.check.median %}<br><span class="small muted">usual {{ "{:,.0f}".format(q.check.median) }}</span>{% endif %}{% else %}–{% endif %}</td>
+      <td><span class="badge b-{{ q.check.status }}" style="white-space:normal">{{ q.check.label }}</span></td>
+      <td>{% if not q.chosen %}<form class="inline" method="post" action="/tickets/{{ t.id }}/quotes/{{ q.id }}/choose"><button type="submit">Choose</button></form>{% endif %}</td>
+    </tr>{% endfor %}</tbody></table>
+    {% else %}<p class="muted">No quote yet.</p>{% endif %}
+    <details style="margin-top:10px"><summary>Add a quote</summary>
+      <form method="post" action="/tickets/{{ t.id }}/quotes">
+        <div class="row">
+          <div><label for="qd">From a partner</label><select id="qd" name="donor_id"><option value="">Not in the database</option>{% for d in donors %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select></div>
+          <div><label for="qs">Or supplier name</label><input id="qs" type="text" name="supplier_name"></div>
+        </div>
+        <div class="row">
+          <div><label for="qa">Total amount (FCFA)</label><input id="qa" type="text" name="amount" required placeholder="1 200 000"></div>
+          <div><label for="qq">Quantity</label><input id="qq" type="text" name="quantity" value="{{ (t.quantity_total)|qty if t.quantity_total else '' }}"></div>
+          <div><label for="qu">Unit</label><input id="qu" type="text" name="unit" value="{{ t.unit or '' }}"></div>
+        </div>
+        <label for="qn">Note</label><input id="qn" type="text" name="note" placeholder="Includes transport and installation">
+        <p><button type="submit">Save quote</button></p>
+      </form>
+    </details>
+  </div>
+</section>
+
+{# ---------------- activity ---------------- #}
+<section class="ppane" id="tab-activity" hidden>
+  <div class="panel" style="max-width:760px">
+    <ul class="log">
+    {% for e in events|reverse %}<li><span class="when">{{ e.at|ago|capitalize }}{% if e.who %}, {{ e.who }}{% endif %}</span><br>{{ e.text|truncate(200) }}</li>
+    {% else %}<li class="muted">Nothing yet.</li>{% endfor %}
+    </ul>
+    {% if followups %}<h3>Checks with the school after delivery</h3><ul class="small">{% for f in followups %}<li>After {{ f.days }} days: due {{ f.due_on }}{% if f.sent_at %}, sent {{ f.sent_at|ago }}{% endif %}</li>{% endfor %}</ul>{% endif %}
+  </div>
+</section>
+
 <script>
 (function () {
+  const tabs = [...document.querySelectorAll(".ptabs [data-tab]")];
+  function show(name) {
+    if (!document.getElementById("tab-" + name)) name = "steps";
+    tabs.forEach(t => t.setAttribute("aria-selected", t.dataset.tab === name ? "true" : "false"));
+    document.querySelectorAll(".ppane").forEach(p => p.hidden = p.id !== "tab-" + name);
+    history.replaceState(null, "", location.pathname + location.search + "#" + name);
+  }
+  tabs.forEach(t => t.addEventListener("click", () => show(t.dataset.tab)));
+  document.querySelectorAll("[data-goto]").forEach(b => b.addEventListener("click", () => show(b.dataset.goto)));
+  const h = location.hash.replace("#", "");
+  show(h === "message" ? "messages" : (h || ({{ 'true' if t.status in ('new', 'matched') and not linked else 'false' }} ? "partners" : "steps")));
+  // message: keep the WhatsApp / SMS links in step with the recipient and the text
   const sel = document.getElementById("to"), box = document.getElementById("mt"), wa = document.getElementById("wa"), sms = document.getElementById("smsl");
   if (!sel) return;
   function sync() {
     const o = sel.selectedOptions[0], phone = (o.dataset.phone || "").replace(/[^0-9+]/g, ""), t = encodeURIComponent(box.value);
-    wa.style.display = sms.style.display = phone ? "" : "none";
+    wa.hidden = sms.hidden = !phone;
     wa.href = "https://wa.me/" + phone.replace("+", "") + "?text=" + t; sms.href = "sms:" + phone + "?&body=" + t;
   }
   sel.addEventListener("change", () => { const o = sel.selectedOptions[0]; if (o.dataset.text) box.value = o.dataset.text; sync(); });

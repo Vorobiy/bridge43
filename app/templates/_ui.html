@@ -107,3 +107,8 @@
 {% macro cover(item_id=None, label="", height=140, need=None) -%}
 <span class="cover" style="--ch:{{ height }}px">{% if item_id %}<img src="/media/{{ item_id }}" alt="Photo sent by {{ label }}" loading="lazy">{% else %}<svg viewBox="0 0 120 110" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">{{ (NEED_ART.get(need) or NEED_ART["classrooms_building"])|safe }}</svg>{% if height >= 90 %}<small>No photo yet</small>{% endif %}{% endif %}</span>
 {%- endmacro %}
+
+{# A small drawing of a kind of need (roof, water, desks...), in a rounded tile. #}
+{% macro need_art(category, size=44) -%}
+<span class="need-art" style="--s:{{ size }}px" aria-hidden="true"><svg viewBox="0 0 120 110" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">{{ (NEED_ART.get(category) or NEED_ART["classrooms_building"])|safe }}</svg></span>
+{%- endmacro %}

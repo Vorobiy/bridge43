@@ -143,7 +143,11 @@ def tickets_board(request: Request, msg: str | None = None, error: str | None = 
             v.sort(key=lambda k: k.get("delivered_at") or "", reverse=True)
         else:
             v.sort(key=lambda k: (urgency.get(k["urgency"], 5), k["id"]))
-    return _render(request, "tickets.html", cols=cols, msg=msg, error=error)
+    for k in cols["matched"] + cols["in_progress"] + cols["delivered"]:
+        steps = db.list_steps(k["id"])
+        k["done"], k["total"] = sum(1 for x in steps if x["done_at"]), len(steps)
+    lanes = {"waiting": cols["new"], "moving": cols["delivered"] + cols["in_progress"] + cols["matched"], "done": cols["checked"]}
+    return _render(request, "tickets.html", cols=cols, lanes=lanes, msg=msg, error=error)
 
 
 def _ticket_or_404(ticket_id: int) -> dict:
@@ -200,7 +204,7 @@ def ticket_assign_plan(ticket_id: int, back: str = Form(""), who: str = Depends(
     plan = workflow.ticket_matches(t)["plan"]
     for p in plan["picks"]:
         workflow.assign(ticket_id, p["donor_id"], p["item_id"], p["covers"], who)
-    msg = f"Added {len(plan['picks'])} partner(s) to “{t['description']}”. Next: message them from the ticket."
+    n = len(plan['picks']); msg = f"{'Partner' if n == 1 else str(n) + ' partners'} confirmed for “{t['description']}”. Next: send them a message."
     return _go(_safe_back(back, f"/tickets/{ticket_id}"), msg=msg)
 
 
@@ -285,7 +289,7 @@ async def ticket_message(ticket_id: int, to: str = Form(...), text: str = Form(.
         how = await run_in_threadpool(workflow.send, contact_id, thread_id, text, who, ticket_id, bool(manual), label)
     except workflow.SendFailed as exc:
         return _go(f"/tickets/{ticket_id}", error=str(exc))
-    return _go(f"/tickets/{ticket_id}", msg=f"Logged on the ticket ({how}).")
+    return _go(f"/tickets/{ticket_id}", msg=f"Message saved on this need ({how}).")
 
 
 @router.post("/tickets/{ticket_id}/note")

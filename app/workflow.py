@@ -797,7 +797,7 @@ def ticket_next_step(t: dict, plan: dict, steps: list[dict]) -> dict | None:
         todo = [s for s in steps if not s["done_at"] and not s["title"].startswith(CONFIRM_PREFIX)
                 and s["title"] != "Check use after 1 month"]
         if status == "matched" and not any(e["kind"] == "message" for e in db.list_events(t["id"])):
-            return {"label": "Tell the partner", "hint": "Send the prepared message below, then log the first step.",
+            return {"label": "Tell the partner", "hint": "A message is ready. Send it from your phone, then tick the first step.",
                     "href": "#message", "button": "Write the message"}
         if todo:
             return {"label": f"Mark done: {todo[0]['title']}", "hint": f"Step {todo[0]['position']} of {len(steps)}.",
