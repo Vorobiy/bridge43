@@ -10,12 +10,24 @@ import re
 TRUST_LEVELS = ["self_reported", "photo_backed", "visit_confirmed"]
 TRUST_LABELS = {"self_reported": "Self-reported", "photo_backed": "Photo-backed", "visit_confirmed": "Visit-confirmed"}
 
-# "Shared location: 4.0511, 9.7679 ..." (written by the Twilio webhook), Google/Apple map links, KoBo geopoints.
+# "Shared location: 4.0511, 9.7679 ..." (written by the Mac app for a WhatsApp location pin), map links, KoBo geopoints.
 _PATTERNS = [
     re.compile(r"Shared location:\s*(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)", re.I),
     re.compile(r"maps\.(?:google\.[a-z.]+|apple\.com)/\S*?[?&](?:q|ll|query)=(-?\d{1,2}\.\d+)(?:,|%2C)(-?\d{1,3}\.\d+)", re.I),
     re.compile(r"(?:^|\n)\s*(?:gps|geopoint|location|coordinates|position)[\w ]*:\s*(-?\d{1,2}\.\d+)[ ,]+(-?\d{1,3}\.\d+)", re.I),
 ]
+
+
+def location_line(lat, lon, label: str | None = None) -> str | None:
+    """A WhatsApp location pin as one readable line the case draft can cite and the map can use."""
+    try:
+        flat, flon = float(lat), float(lon)
+    except (TypeError, ValueError):
+        return None
+    if not (-90 <= flat <= 90 and -180 <= flon <= 180):
+        return None
+    return (f"Shared location: {flat:.6f}, {flon:.6f}" + (f" ({label.strip()})" if label and label.strip() else "")
+            + f" https://maps.google.com/?q={flat:.6f},{flon:.6f}")
 
 
 def _usable(item: dict) -> bool:

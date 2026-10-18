@@ -373,9 +373,8 @@
       <p class="hint">{{ hint }}</p>
       <textarea name="text" maxlength="1500" rows="6">{{ text }}</textarea>
       <div class="send-row">
-        {% if twilio_enabled and can_message %}<button class="primary" type="submit">Send now</button>{% endif %}
         {% if phone %}
-          <a class="btn {{ '' if twilio_enabled and can_message else 'primary' }}" data-open="wa" href="https://wa.me/{{ phone|replace('+', '') }}" target="_blank" rel="noopener">Open in WhatsApp</a>
+          <a class="btn primary" data-open="wa" href="https://wa.me/{{ phone|replace('+', '') }}" target="_blank" rel="noopener">Open in WhatsApp</a>
           <a class="btn" data-open="sms" href="sms:{{ phone }}">Open in SMS</a>
         {% endif %}
         <button type="button" data-copy>Copy</button>

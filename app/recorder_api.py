@@ -175,8 +175,14 @@ def file_whatsapp_messages(payload: dict, files: dict[str, bytes]) -> dict:
         return {"filed": False, "reason": "no messages"}
 
     contact = _existing_contact(address, name)
+    from . import consent
+    if contact and any(not m.get("from_me") and consent.is_opt_out(m.get("text")) for m in new):
+        consent.opt_out(contact["id"])
+        return {"filed": False, "reason": "contact asked to stop: their data was deleted"}
     if contact and contact.get("consent_status") == "opted_out":
-        return {"filed": False, "reason": "contact opted out"}
+        if not any(not m.get("from_me") for m in new):
+            return {"filed": False, "reason": "contact opted out"}
+        db.set_consent(contact["id"], "pending")  # they wrote again after opting out: a fresh start
     to_file = new
     if not (contact and _has_active_case(contact["id"])):
         relevant, reason = triage.is_relevant(_triage_text(name, context + new, files))

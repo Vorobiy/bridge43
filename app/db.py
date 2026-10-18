@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS items (
     body TEXT,                             -- original text, caption or form content
     media_path TEXT,
     media_mime TEXT,
-    external_id TEXT UNIQUE,               -- Twilio MessageSid/CallSid, Kobo uuid... (dedupe)
+    external_id TEXT UNIQUE,               -- WhatsApp Desktop message id, Kobo uuid... (dedupe)
     status TEXT NOT NULL DEFAULT 'received', -- received | awaiting_media | held | processing | processed | failed
     extracted_text TEXT,                   -- transcript / image description / form text
     extraction_meta TEXT,                  -- JSON: language, duration, model...
@@ -623,7 +623,9 @@ def add_summary(thread_id: int, data: dict, model: str, item_ids: list[int]) -> 
             (thread_id, version, model, json.dumps(data, ensure_ascii=False), json.dumps(item_ids), now()),
         )
         # a resolved case stays resolved (it keeps counting on Impact); its new draft is flagged for review
-        conn.execute("UPDATE threads SET status = CASE WHEN status = 'resolved' THEN 'resolved' ELSE 'draft_ready' END, "
+        # staff marked it not relevant: it stays set aside (the AI cannot undo a staff decision)
+        conn.execute("UPDATE threads SET status = CASE WHEN status = 'resolved' THEN 'resolved' "
+                     "WHEN status = 'not_relevant' AND relevance_locked = 1 THEN 'not_relevant' ELSE 'draft_ready' END, "
                      "stale_summary = CASE WHEN status = 'resolved' THEN 1 ELSE 0 END WHERE id = ?", (thread_id,))
         return dict(conn.execute("SELECT * FROM summaries WHERE id = ?", (cur.lastrowid,)).fetchone())
 

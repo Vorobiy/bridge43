@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta, timezone
 
 from app import db, gaps, matching, scoring, summary, workflow
-from app.channels import twilio as tw
+from conftest import send_whatsapp
 
 
 def _thread_for(address):
@@ -46,8 +46,7 @@ def _offer_draft(name, items, regions=("National",), **over):
 
 
 def _intake_and_approve(client, fakes, phone, text, draft):
-    client.post("/webhooks/twilio/messaging", data={"From": f"whatsapp:{phone}", "Body": text,
-                                                     "MessageSid": f"SM{phone}", "NumMedia": "0"})
+    send_whatsapp(client, phone, text)
     t = _thread_for(f"whatsapp:{phone}")
     fakes.model_output = draft
     summary.summarize_thread(t["id"], manual=True)
@@ -120,9 +119,6 @@ def test_donor_questions_and_schema():
 # ------------------------------------------------------------------ end to end
 
 def test_full_loop_school_to_follow_up(client, fakes, monkeypatch):
-    sent = []
-    monkeypatch.setattr(tw, "send_message", lambda to, text: sent.append((to, text)) or f"SMout{len(sent)}")
-
     school = _intake_and_approve(client, fakes, "+237670001001", "We need a computer lab", _school_draft())
     tickets = db.list_tickets(thread_id=school["id"])
     assert len(tickets) == 1 and tickets[0]["quantity_total"] == 40 and tickets[0]["status"] == "new"
@@ -163,12 +159,11 @@ def test_full_loop_school_to_follow_up(client, fakes, monkeypatch):
     assert titles.index("Pack and ship from abroad") < titles.index("Deliver the equipment")  # shipping first
     assert workflow.ticket_matches(ticket)["plan"]["type"] == "covered"
 
-    # message the partner (Twilio) and log a phone message manually
+    # staff message the partner and the school from their own phone; Bridge logs both
     r = client.post(f"/tickets/{ticket['id']}/message", data={"to": str(donors["Toronto Group"]["id"]),
-                                                             "text": "PS43: can you ship?"}, follow_redirects=False)
-    assert r.status_code == 303 and sent[-1] == ("whatsapp:+16475550001", "PS43: can you ship?")
+                                                             "text": "PS43: can you ship?", "manual": "1"}, follow_redirects=False)
+    assert r.status_code == 303 and "error" not in r.headers["location"]
     client.post(f"/tickets/{ticket['id']}/message", data={"to": "school", "text": "PS43: good news", "manual": "1"})
-    assert len(sent) == 1  # the manual one was only logged
     kinds = [e["kind"] for e in db.list_events(ticket["id"])]
     assert kinds.count("message") == 2
     assert any("[Message to partner]" in (i["body"] or "") for i in db.thread_items(toronto_t["id"]))

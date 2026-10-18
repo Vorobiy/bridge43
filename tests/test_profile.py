@@ -1,6 +1,6 @@
 """School profile (8 areas), WhatsApp location, trust level and follow-up questions."""
 from app import db, evidence, gaps, summary
-from app.channels import twilio as tw
+from conftest import send_whatsapp
 
 
 def _thread_for(address):
@@ -49,9 +49,9 @@ def test_normalize_fills_profile_defaults_and_fixes_bad_values():
 # ------------------------------------------------------------------ location
 
 def test_location_text_and_parsing():
-    line = tw.location_text({"Latitude": "10.7389", "Longitude": "13.8031", "Label": "EP Mokolo"})
+    line = evidence.location_line("10.7389", "13.8031", "EP Mokolo")
     assert line.startswith("Shared location: 10.738900, 13.803100 (EP Mokolo)")
-    assert tw.location_text({"Latitude": "abc", "Longitude": "1"}) is None
+    assert evidence.location_line("abc", "1") is None
     assert evidence.find_coordinates(line) == (10.7389, 13.8031)
     assert evidence.find_coordinates("https://maps.google.com/?q=4.0511,9.7679") == (4.0511, 9.7679)
     assert evidence.find_coordinates("gps: 5.4778 10.4176 1400 5") == (5.4778, 10.4176)  # KoBo geopoint
@@ -59,11 +59,8 @@ def test_location_text_and_parsing():
 
 
 def test_whatsapp_location_pin_becomes_cited_map_location(client, fakes):
-    client.post("/webhooks/twilio/messaging", data={
-        "From": "whatsapp:+237670000101", "Body": "Notre école n'a pas d'eau", "MessageSid": "SMa", "NumMedia": "0"})
-    client.post("/webhooks/twilio/messaging", data={
-        "From": "whatsapp:+237670000101", "Body": "", "MessageSid": "SMb", "NumMedia": "0",
-        "Latitude": "10.7389", "Longitude": "13.8031", "Label": "EP Mokolo"})
+    send_whatsapp(client, "+237670000101", "Notre école n'a pas d'eau")
+    send_whatsapp(client, "+237670000101", evidence.location_line(10.7389, 13.8031, "EP Mokolo"))  # pin, as the Mac app sends it
     t = _thread_for("whatsapp:+237670000101")
     items = db.thread_items(t["id"])
     pin = next(i for i in items if (i["body"] or "").startswith("Shared location"))
@@ -91,10 +88,7 @@ def test_trust_level_rises_with_evidence():
 
 
 def test_photo_makes_case_photo_backed_and_drops_photo_question(client, fakes, monkeypatch):
-    monkeypatch.setattr(tw, "download", lambda url: (b"\xff\xd8 fake", "image/jpeg"))
-    client.post("/webhooks/twilio/messaging", data={
-        "From": "whatsapp:+237670000102", "Body": "Les toilettes", "MessageSid": "SMc", "NumMedia": "1",
-        "MediaUrl0": "https://api.twilio.com/img", "MediaContentType0": "image/jpeg"})
+    send_whatsapp(client, "+237670000102", "Les toilettes", files=[("toilets.jpg", b"\xff\xd8 fake")])
     t = _thread_for("whatsapp:+237670000102")
     fakes.model_output = _draft()
     summary.summarize_thread(t["id"], manual=True)
@@ -139,10 +133,7 @@ def test_no_profile_questions_for_partners_or_unrelated_chats():
 
 
 def test_follow_up_panel_send_and_api(client, fakes, monkeypatch):
-    sent = []
-    monkeypatch.setattr(tw, "send_message", lambda to, text: sent.append((to, text)) or "SMout1")
-    client.post("/webhooks/twilio/messaging", data={
-        "From": "whatsapp:+237670000103", "Body": "Pas d'eau à l'école", "MessageSid": "SMd", "NumMedia": "0"})
+    send_whatsapp(client, "+237670000103", "Pas d'eau à l'école")
     t = _thread_for("whatsapp:+237670000103")
     fakes.model_output = _draft()
     summary.summarize_thread(t["id"], manual=True)
@@ -151,10 +142,10 @@ def test_follow_up_panel_send_and_api(client, fakes, monkeypatch):
     assert "Ask for missing information" in page and "School profile" in page and "Self-reported" in page
 
     r = client.post(f"/summaries/{s['id']}/send-follow-up", data={"text": s["data"]["_follow_up"]["message"]},
-                    follow_redirects=False)
-    assert r.status_code == 303 and sent and sent[0][1].startswith("PS43 : Merci")
+                    follow_redirects=False)  # staff sent it from their phone; Bridge logs it
+    assert r.status_code == 303 and "error" not in r.headers["location"]
     out = [i for i in db.thread_items(t["id"]) if i["direction"] == "out"]
-    assert out[-1]["body"].startswith("[Follow-up questions sent] PS43 : Merci")
+    assert out[-1]["body"].startswith("[Follow-up questions sent from staff phone] PS43 : Merci")
 
     # a staff edit that fills a gap updates the questions
     d = dict(s["data"])

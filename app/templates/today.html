@@ -56,8 +56,9 @@
       <span class="small muted">{{ f.school }} · {{ f.days }}-day check · due {{ f.due_on }}</span></div>
       <form method="post" action="/followups/{{ f.id }}/send">
         <input type="hidden" name="text" value="{{ f.message }}"><input type="hidden" name="back" value="/today">
-        <input type="hidden" name="manual" value="{{ '' if settings.twilio_enabled else '1' }}">
-        <button class="primary" type="submit" title="{{ f.message }}">{{ "Send on WhatsApp" if settings.twilio_enabled else "Mark as sent" }}</button></form></div>
+        <input type="hidden" name="manual" value="1">
+        {% if f.phone %}<a class="btn" href="https://wa.me/{{ f.phone|replace('+', '') }}?text={{ f.message|urlencode }}" target="_blank" rel="noopener">WhatsApp</a>{% endif %}
+        <button class="primary" type="submit" title="{{ f.message }}">I sent it ✓</button></form></div>
     {% else %}<p class="done">No follow-ups due.</p>{% endfor %}
   </div>
   {% endif %}

@@ -163,8 +163,7 @@
       </select>
       <textarea id="mt" name="text" rows="5" style="margin-top:8px">{{ partner_text if partner_default else school_text }}</textarea>
       <div class="actions" style="margin-top:8px">
-        {% if settings.twilio_enabled %}<button class="primary" type="submit">Send now</button>{% endif %}
-        <a class="btn {{ '' if settings.twilio_enabled else 'primary' }}" id="wa" href="#" target="_blank" rel="noopener">Open in WhatsApp</a>
+        <a class="btn primary" id="wa" href="#" target="_blank" rel="noopener">Open in WhatsApp</a>
         <a class="btn" id="smsl" href="#">Open in SMS</a>
         <span style="flex:1"></span>
         <button type="submit" name="manual" value="1">I sent it ✓</button>

@@ -12,7 +12,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
 from . import db, gaps, matching, media
-from .channels import staff_intake, twilio
+from .channels import staff_intake
 from .config import settings
 from .processing import pipeline
 from .scoring import AREA_LABELS
@@ -182,7 +182,7 @@ def thread_page(request: Request, thread_id: int, msg: str | None = None, error:
         new_since=new_since, msg=msg, error=error, need_categories=NEED_CATEGORIES, readiness_keys=READINESS_KEYS,
         profile_keys=PROFILE_KEYS, profile_areas=PROFILE_AREAS,
         summary_json=json.dumps(summary["data"], indent=2, ensure_ascii=False) if summary else "",
-        twilio_enabled=settings.twilio_enabled, can_message=db.is_messageable(contact.get("reply_to") or contact["address"]),
+        can_message=db.is_messageable(contact.get("reply_to") or contact["address"]),
         reply_to=contact.get("reply_to") or contact["address"], channels=sorted({i["channel"] for i in items}),
         other_cases=[t for t in db.list_threads() if t["id"] != thread_id],
         case_tickets=case_tickets, partner=partner, priority=_priority(summary), area_labels=AREA_LABELS,
@@ -304,11 +304,8 @@ def reject(summary_id: int, notes: str = Form(""), who: str = Depends(staff)):
 
 
 async def _send_to_contact(summary_id: int, text: str, who: str, label: str,
-                           manual: bool = False) -> tuple[dict, str | None]:
-    """Send a WhatsApp/SMS to the case contact and log it in the thread. Returns (thread, error).
-
-    manual=True: staff sent it from their own phone (WhatsApp/SMS link or copy-paste); only log it here.
-    """
+                           manual: bool = True) -> tuple[dict, str | None]:
+    """Log a message staff sent from their own phone (WhatsApp/SMS link or copy-paste) in the case."""
     s = _summary_for(summary_id)
     thread = db.get_thread(s["thread_id"])
     contact = db.get_contact(thread["contact_id"])
@@ -316,18 +313,11 @@ async def _send_to_contact(summary_id: int, text: str, who: str, label: str,
         return thread, "This contact opted out."
     if not text.strip():
         return thread, "Nothing to send."
-    sid = None
-    if not manual:
-        try:
-            sid = await run_in_threadpool(twilio.send_message, contact.get("reply_to") or contact["address"], text.strip())
-        except twilio.SendError as exc:
-            return thread, f"Not sent: {exc}"
-    else:
-        label = label + " from staff phone"
+    label = label + " from staff phone"
     to = contact.get("reply_to") or contact["address"]
     db.add_item(contact_id=contact["id"], channel="whatsapp" if to.startswith("whatsapp:") else "sms",
                 kind="text", direction="out", author=who, body=f"[{label}] {text.strip()}",
-                external_id=sid or None, status="processed", thread_id=thread["id"])
+                status="processed", thread_id=thread["id"])
     return thread, None
 
 
@@ -338,8 +328,7 @@ async def send_confirmation(summary_id: int, text: str = Form(...), manual: str 
     if error:
         return _back(thread["id"], error=error)
     db.update_summary(summary_id, confirmation_sent_at=db.now())
-    return _back(thread["id"], msg="Confirmation logged. Their reply will appear here." if manual == "1"
-                 else "Confirmation sent. Their reply will appear here.")
+    return _back(thread["id"], msg="Confirmation logged. Their reply will appear here.")
 
 
 @router.post("/summaries/{summary_id}/send-follow-up")
@@ -349,8 +338,7 @@ async def send_follow_up(summary_id: int, text: str = Form(...), manual: str = F
     thread, error = await _send_to_contact(summary_id, text, who, "Follow-up questions sent", manual == "1")
     if error:
         return _back(thread["id"], error=error)
-    return _back(thread["id"], msg="Questions logged. Answers will appear here and fill the profile." if manual == "1"
-                 else "Questions sent. Answers will appear here and fill the profile.")
+    return _back(thread["id"], msg="Questions logged. Answers will appear here and fill the profile.")
 
 
 # ------------------------------------------------------------------ organising cases

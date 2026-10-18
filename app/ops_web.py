@@ -283,7 +283,7 @@ async def ticket_message(ticket_id: int, to: str = Form(...), text: str = Form(.
     try:
         how = await run_in_threadpool(workflow.send, contact_id, thread_id, text, who, ticket_id, bool(manual), label)
     except workflow.SendFailed as exc:
-        return _go(f"/tickets/{ticket_id}", error=f"Not sent: {exc}. Tick 'I sent it from my phone' to just log it.")
+        return _go(f"/tickets/{ticket_id}", error=str(exc))
     return _go(f"/tickets/{ticket_id}", msg=f"Logged on the ticket ({how}).")
 
 
@@ -306,9 +306,9 @@ async def followup_send(followup_id: int, text: str = Form(...), manual: str = F
         await run_in_threadpool(workflow.send, f["contact_id"], f["thread_id"], text, who, f["ticket_id"], bool(manual),
                                 f"{f['days']}-day follow-up")
     except workflow.SendFailed as exc:
-        return _go(back, error=f"Not sent: {exc}. Tick 'I sent it from my phone' to just log it.")
+        return _go(back, error=str(exc))
     db.set_followup(followup_id, sent_at=db.now(), sent_by=who)
-    return _go(back, msg="Follow-up sent. The school's answers will arrive in its case.")
+    return _go(back, msg="Follow-up logged. The school's answers will arrive in its case.")
 
 
 # ------------------------------------------------------------------ partners & donors

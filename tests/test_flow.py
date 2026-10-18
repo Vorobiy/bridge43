@@ -4,8 +4,8 @@ import json
 import zipfile
 
 from app import db, summary
-from app.channels import twilio as tw
 from app.config import settings
+from conftest import send_whatsapp
 
 
 def _thread_for(address):
@@ -13,30 +13,20 @@ def _thread_for(address):
     return max((t for t in db.list_threads() if t["address"] == address), key=lambda t: t["id"])
 
 
-def test_whatsapp_text_gets_consent_notice_then_processed(client):
-    r = client.post("/webhooks/twilio/messaging", data={
-        "From": "whatsapp:+237670000001", "Body": "Bonjour, notre école a besoin d'aide", "MessageSid": "SM1",
-        "NumMedia": "0", "ProfileName": "Mr. Tabi"})
-    assert r.status_code == 200 and "PS43 Foundation" in r.text  # notice sent once
+def test_whatsapp_text_processed_and_not_duplicated(client, wa):
+    r = wa("+237670000001", "Bonjour, notre école a besoin d'aide", name="Mr. Tabi", msg_id=1)
+    assert r.status_code == 200 and r.json()["filed"] is True
     t = _thread_for("whatsapp:+237670000001")
     items = db.thread_items(t["id"])
     assert items[0]["status"] == "processed" and items[0]["author"] == "Mr. Tabi"
-
-    r2 = client.post("/webhooks/twilio/messaging", data={
-        "From": "whatsapp:+237670000001", "Body": "Le toit fuit", "MessageSid": "SM2", "NumMedia": "0"})
-    assert "<Message>" not in r2.text  # no second notice
-    # retry of the same webhook does not duplicate
-    client.post("/webhooks/twilio/messaging", data={
-        "From": "whatsapp:+237670000001", "Body": "Le toit fuit", "MessageSid": "SM2", "NumMedia": "0"})
+    wa("+237670000001", "Le toit fuit", msg_id=2)
+    wa("+237670000001", "Le toit fuit", msg_id=2)  # the laptop sending the same message again does not duplicate it
     assert len(db.thread_items(t["id"])) == 2
 
 
-def test_whatsapp_photo_and_voice_note(client, monkeypatch):
-    monkeypatch.setattr(tw, "download", lambda url: (b"\xff\xd8 fake bytes", "image/jpeg" if "img" in url else "audio/ogg"))
-    client.post("/webhooks/twilio/messaging", data={
-        "From": "whatsapp:+237670000002", "Body": "Notre toit", "MessageSid": "SM3", "NumMedia": "2",
-        "MediaUrl0": "https://api.twilio.com/img", "MediaContentType0": "image/jpeg",
-        "MediaUrl1": "https://api.twilio.com/voice", "MediaContentType1": "audio/ogg"})
+def test_whatsapp_photo_and_voice_note(client, wa):
+    wa("+237670000002", "Notre toit", files=[("roof.jpg", b"\xff\xd8 fake bytes")])
+    wa("+237670000002", files=[("voice.opus", b"OggS fake")])
     items = db.thread_items(_thread_for("whatsapp:+237670000002")["id"])
     kinds = {i["kind"]: i for i in items}
     assert kinds["image"]["extracted_text"] == "1 image(s): roof with holes"
@@ -45,49 +35,15 @@ def test_whatsapp_photo_and_voice_note(client, monkeypatch):
     assert db.get_contact(items[0]["contact_id"])["language"] == "french"
 
 
-def test_stop_deletes_everything(client):
-    client.post("/webhooks/twilio/messaging", data={"From": "+237670000003", "Body": "hello", "MessageSid": "SM4"})
-    r = client.post("/webhooks/twilio/messaging", data={"From": "+237670000003", "Body": "STOP", "MessageSid": "SM5"})
-    assert "deleted" in r.text
+def test_stop_deletes_everything(client, wa):
+    wa("+237670000003", "hello, about our school")
+    r = wa("+237670000003", "STOP")
+    assert r.json()["filed"] is False and "deleted" in r.json()["reason"]
     assert not [t for t in db.list_threads() if t["address"] == "+237670000003"]
-
-
-def test_explicit_consent_holds_until_yes(client, monkeypatch):
-    monkeypatch.setattr(settings, "require_explicit_consent", True)
-    r = client.post("/webhooks/twilio/messaging", data={"From": "+237670000004", "Body": "We need desks", "MessageSid": "SM6"})
-    assert "Reply YES" in r.text
-    t = _thread_for("+237670000004")
-    assert db.thread_items(t["id"])[0]["status"] == "held"
-    client.post("/webhooks/twilio/messaging", data={"From": "+237670000004", "Body": "Oui", "MessageSid": "SM7"})
-    items = db.thread_items(t["id"])
-    assert len(items) == 1 and items[0]["status"] == "processed"  # "Oui" itself is not case content
-
-
-def test_twilio_signature_enforced(client, monkeypatch):
-    monkeypatch.setattr(settings, "twilio_auth_token", "secret-token")
-    params = {"From": "+237670000005", "Body": "hi", "MessageSid": "SM8"}
-    assert client.post("/webhooks/twilio/messaging", data=params).status_code == 403
-    sig = tw.compute_signature("secret-token", "https://bridge.test/webhooks/twilio/messaging", params)
-    assert client.post("/webhooks/twilio/messaging", data=params, headers={"X-Twilio-Signature": sig}).status_code == 200
-
-
-def test_call_voicemail_recorded_and_transcribed(client, monkeypatch):
-    r = client.post("/webhooks/twilio/voice", data={"From": "whatsapp:+237670000006", "CallSid": "CA1"})
-    assert "<Record" in r.text and "https://bridge.test/webhooks/twilio/recording" in r.text and "fr-FR" in r.text
-    monkeypatch.setattr(tw, "download", lambda url: (b"ID3 fake mp3", "audio/mpeg"))
-    r = client.post("/webhooks/twilio/recording", data={
-        "CallSid": "CA1", "RecordingUrl": "https://api.twilio.com/rec/RE1", "RecordingSid": "RE1",
-        "RecordingStatus": "completed", "RecordingDuration": "70"})
-    assert r.status_code == 204
-    item = db.get_item_by_external_id("CA1")
-    assert item["status"] == "processed"
-    assert "[01:05] 40 bancs" in item["extracted_text"]  # call transcripts keep timestamps
-
-
-def test_forwarded_call_dials_staff(client, monkeypatch):
-    monkeypatch.setattr(settings, "staff_forward_number", "+14165550000")
-    r = client.post("/webhooks/twilio/voice", data={"From": "+237670000007", "CallSid": "CA2"})
-    assert "<Dial" in r.text and "record-from-answer-dual" in r.text and "+14165550000" in r.text
+    with db.tx() as conn:
+        assert conn.execute("SELECT consent_status FROM contacts WHERE address = '+237670000003'").fetchone()[0] == "opted_out"
+    # writing again later is a fresh start
+    assert wa("+237670000003", "Bonjour, notre école").json()["filed"] is True
 
 
 def test_kobo_submission(client, monkeypatch):
@@ -159,13 +115,13 @@ def test_export_upload_to_approved_case(client, fakes):
     assert cases[0]["case"]["title"] == "GBHS Test - roof"
 
     # an approved case keeps collecting: a later WhatsApp message lands in the same case
-    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+237670000009", "Body": "Merci !", "MessageSid": "SM9"})
+    send_whatsapp(client, "+237670000009", "Merci !")
     assert _thread_for("whatsapp:+237670000009")["id"] == thread_id
     assert db.get_thread(thread_id)["stale_summary"] == 1
 
     # once staff close it, the next message opens a new case with a new number
     client.post(f"/threads/{thread_id}/close")
-    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+237670000009", "Body": "Bonjour", "MessageSid": "SM9b"})
+    send_whatsapp(client, "+237670000009", "Bonjour, une autre école")
     new = _thread_for("whatsapp:+237670000009")
     assert new["id"] != thread_id and new["case_number"] != thread["case_number"]
 
@@ -199,8 +155,8 @@ def test_staff_password(client, monkeypatch):
     monkeypatch.setattr(settings, "staff_password", "pw")
     assert client.get("/").status_code == 401
     assert client.get("/", auth=("ps43", "pw")).status_code == 200
-    # webhooks are not behind the staff login
-    assert client.post("/webhooks/twilio/messaging", data={"From": "+237670000010", "Body": "x", "MessageSid": "SM10"}).status_code == 200
+    # the laptop's uploads use their own token, not the staff login
+    assert send_whatsapp(client, "+237670000010", "our school needs help").status_code == 200
 
 
 def test_prompt_marks_untrusted_content():
@@ -215,7 +171,8 @@ def test_recorder_upload(client, monkeypatch):
     assert recorder_api.split_contact("Lycée de Test") == ("Lycée de Test", None)
 
     files = {"file": ("call.m4a", b"fake audio", "audio/mp4")}
-    assert client.post("/api/recorder/calls", files=files).status_code == 403  # off by default
+    monkeypatch.setattr(settings, "recorder_token", "")
+    assert client.post("/api/recorder/calls", files=files).status_code == 403  # off until a token is set
     monkeypatch.setattr(settings, "recorder_token", "tok")
     assert client.post("/api/recorder/calls", files=files, headers={"Authorization": "Bearer nope"}).status_code == 401
     r = client.post("/api/recorder/calls", files=files, headers={"Authorization": "Bearer tok"},
@@ -233,14 +190,11 @@ def test_recorder_upload(client, monkeypatch):
 def test_every_channel_lands_in_one_case(client, monkeypatch):
     """Text, photo, voice note, SMS, laptop call recording and KoBo form from one school = one case."""
     from app.channels import kobo
-    monkeypatch.setattr(tw, "download", lambda url: (b"fake", "image/jpeg" if "img" in url else "audio/ogg"))
     monkeypatch.setattr(kobo, "_download", lambda url: (b"fake", "image/jpeg"))
-    monkeypatch.setattr(settings, "recorder_token", "tok")
     num = "+237 670 000 020"
-    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+237670000020", "Body": "Bonjour", "MessageSid": "X1", "ProfileName": "M. Ewane"})
-    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+237670000020", "Body": "", "MessageSid": "X2", "NumMedia": "2",
-                "MediaUrl0": "https://t/img", "MediaContentType0": "image/jpeg", "MediaUrl1": "https://t/voice", "MediaContentType1": "audio/ogg"})
-    client.post("/webhooks/twilio/messaging", data={"From": "+237670000020", "Body": "SMS: notre toit fuit", "MessageSid": "X3"})
+    send_whatsapp(client, "+237670000020", "Bonjour", name="M. Ewane")
+    send_whatsapp(client, "+237670000020", files=[("p.jpg", b"fake"), ("v.opus", b"fake")])
+    send_whatsapp(client, "+237670000020", "notre toit fuit")
     client.post("/api/recorder/calls", headers={"Authorization": "Bearer tok"}, data={"contact": f"M. Ewane {num}"},
                 files={"file": ("call.caf", b"fake", "audio/x-caf")})
     client.post("/webhooks/kobo", json={"_uuid": "k20", "school_phone": num, "students": 300})
@@ -251,10 +205,10 @@ def test_every_channel_lands_in_one_case(client, monkeypatch):
     case = cases[0]
     items = db.thread_items(case["id"])
     assert {i["kind"] for i in items} >= {"text", "image", "audio", "form"}
-    assert {i["channel"] for i in items} >= {"whatsapp", "sms", "call", "kobo", "agent"}
+    assert {i["channel"] for i in items} >= {"whatsapp", "call", "kobo", "agent"}
     assert case["case_number"].startswith("PS43-")
-    # confirmations go back over WhatsApp/SMS, whichever they used last
-    assert db.get_contact(case["contact_id"])["reply_to"] == "+237670000020"
+    # staff reply on WhatsApp, where they wrote from
+    assert db.get_contact(case["contact_id"])["reply_to"] == "whatsapp:+237670000020"
 
     # a call filed with only a name joins the same case by name
     client.post("/api/recorder/calls", headers={"Authorization": "Bearer tok"}, data={"contact": "m. ewane"},
@@ -313,8 +267,7 @@ def test_text_after_name_only_call_joins_the_same_case(client, monkeypatch):
     r = client.post("/api/recorder/calls", headers={"Authorization": "Bearer tok"},
                     data={"contact": "‎Connor - WhatsApp voice call"}, files={"file": ("c.caf", b"x", "audio/x-caf")})
     case = db.get_thread(r.json()["thread_id"])
-    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+16475550123", "Body": "Hi, following up on our call",
-                                                    "MessageSid": "SMconn", "ProfileName": "Connor"})
+    send_whatsapp(client, "+16475550123", "Hi, following up on our call", name="Connor")
     items = db.thread_items(case["id"])
     assert items[-1]["body"] == "Hi, following up on our call"
     contact = db.get_contact(case["contact_id"])
@@ -327,7 +280,7 @@ def test_text_after_name_only_call_joins_the_same_case(client, monkeypatch):
 
 def test_new_message_updates_an_approved_case(client, fakes):
     """A new WhatsApp text on an approved case produces an updated draft built on the approved record."""
-    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+237670000040", "Body": "Notre toit fuit", "MessageSid": "U1"})
+    send_whatsapp(client, "+237670000040", "Notre toit fuit")
     case = _thread_for("whatsapp:+237670000040")
     summary.summarize_thread(case["id"])
     s1 = db.latest_summary(case["id"])
@@ -339,7 +292,7 @@ def test_new_message_updates_an_approved_case(client, fakes):
     # nothing new -> automatic update does nothing
     assert summary.summarize_thread(case["id"]) is None
 
-    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+237670000040", "Body": "Aussi 30 bancs cassés", "MessageSid": "U2"})
+    send_whatsapp(client, "+237670000040", "Aussi 30 bancs cassés")
     fakes.model_output = dict(s1["data"], what_changed="Adds 30 broken benches [I2].")
     s2 = summary.summarize_thread(case["id"])           # what the pipeline runs after new items settle
     assert s2 is not None and s2["version"] == 2
@@ -355,7 +308,7 @@ def test_new_message_updates_an_approved_case(client, fakes):
 def test_hosted_requires_password_and_uses_railway_domain(client, monkeypatch):
     monkeypatch.setattr(settings, "hosted", True)
     assert client.get("/").status_code == 503
-    assert client.post("/webhooks/twilio/messaging", data={"From": "+237670000050", "Body": "x", "MessageSid": "H1"}).status_code == 200
+    assert send_whatsapp(client, "+237670000050", "school roof").status_code == 200  # the laptop still gets in
     monkeypatch.setenv("RAILWAY_PUBLIC_DOMAIN", "bridge43-production.up.railway.app")
     monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
     from app.config import Settings
@@ -376,7 +329,9 @@ def test_railway_overrides_bad_values(monkeypatch):
 
 
 def test_unrelated_conversations_are_set_aside(client, fakes, monkeypatch):
-    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+16470000060", "Body": "yo are we still on for basketball", "MessageSid": "R1"})
+    from app import triage
+    monkeypatch.setattr(triage, "is_relevant", lambda text: (True, "screening let it through"))
+    send_whatsapp(client, "+16470000060", "yo are we still on for basketball")
     case = _thread_for("whatsapp:+16470000060")
     base = summary.normalize({"title": "Personal chat", "case_type": "unclear"})
     fakes.model_output = dict(base, relevance="not_relevant", relevance_reason="Personal plans, not school work.")
@@ -389,7 +344,7 @@ def test_unrelated_conversations_are_set_aside(client, fakes, monkeypatch):
     assert all(r["case_number"] != case["case_number"] for r in recent)
 
     # the same contact later asks about a school: the case comes back automatically
-    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+16470000060", "Body": "also my cousin's school in Kumba lost its roof", "MessageSid": "R2"})
+    send_whatsapp(client, "+16470000060", "also my cousin's school in Kumba lost its roof")
     fakes.model_output = dict(base, relevance="relevant", relevance_reason="School roof in Kumba.")
     summary.summarize_thread(case["id"])
     assert db.get_thread(case["id"])["status"] == "draft_ready"
@@ -397,13 +352,13 @@ def test_unrelated_conversations_are_set_aside(client, fakes, monkeypatch):
 
     # staff can override, and the AI then leaves it alone
     client.post(f"/threads/{case['id']}/relevance", data={"relevant": "no"})
-    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+16470000060", "Body": "ok", "MessageSid": "R3"})
+    send_whatsapp(client, "+16470000060", "ok")
     fakes.model_output = dict(base, relevance="relevant")
     summary.summarize_thread(case["id"])
     assert db.get_thread(case["id"])["status"] == "not_relevant"     # staff said not relevant: AI can't undo it
     client.post(f"/threads/{case['id']}/relevance", data={"relevant": "yes"})
     fakes.model_output = dict(base, relevance="not_relevant")
-    client.post("/webhooks/twilio/messaging", data={"From": "whatsapp:+16470000060", "Body": "lol", "MessageSid": "R4"})
+    send_whatsapp(client, "+16470000060", "haha")
     summary.summarize_thread(case["id"])
     assert db.get_thread(case["id"])["status"] != "not_relevant"     # staff said it's a case
 

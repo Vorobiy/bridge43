@@ -21,9 +21,7 @@ def fakes(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
     monkeypatch.setattr(settings, "auto_summarize", False)
     monkeypatch.setattr(settings, "staff_password", "")
-    monkeypatch.setattr(settings, "require_explicit_consent", False)
-    monkeypatch.setattr(settings, "twilio_auth_token", "")
-    monkeypatch.setattr(settings, "twilio_account_sid", "")
+    monkeypatch.setattr(settings, "recorder_token", "tok")
     monkeypatch.setattr(settings, "public_base_url", "https://bridge.test")
     db.init_db()
 
@@ -66,7 +64,8 @@ def fakes(tmp_path, monkeypatch):
     def fake_triage(conversation: str):
         f.triage_calls.append(conversation)
         low = conversation.lower()
-        return any(w in low for w in ("school", "école", "roof", "toit", "bancs", "truck", "cement")), "fake"
+        personal = ("dinner", "basketball", "lol", "mom", "birthday")
+        return not any(w in low for w in personal), "fake"
 
     monkeypatch.setattr(triage, "is_relevant", fake_triage)
     return f
@@ -78,3 +77,36 @@ def client(fakes):
 
     with TestClient(app) as c:
         yield c
+
+
+_ids = iter(range(1, 10**9))
+
+
+def send_whatsapp(client, phone, text=None, *, name=None, files=None, kind=None, from_me=False, msg_id=None,
+                  chat_id=None, at=None):
+    """A WhatsApp message arriving through the PS43 laptop (the menu bar app reads WhatsApp Desktop).
+
+    files: [(filename, bytes)] attached to this one message (photo, voice note...).
+    """
+    import json
+    msgs, uploads = [], []
+    mid = msg_id if msg_id is not None else next(_ids)
+    if files:
+        for i, (fname, data) in enumerate(files):
+            ext = fname.rsplit(".", 1)[-1].lower()
+            k = kind or ("audio" if ext in ("opus", "ogg", "m4a", "mp3") else "video" if ext in ("mp4", "mov") else
+                         "image" if ext in ("jpg", "jpeg", "png", "webp") else "document")
+            msgs.append({"id": f"{mid}-{i}", "at": at, "from_me": from_me, "kind": k, "text": text if i == 0 else "",
+                         "file": fname})
+            uploads.append(("files", (fname, data, "application/octet-stream")))
+    else:
+        msgs.append({"id": mid, "at": at, "from_me": from_me, "kind": "text", "text": text or ""})
+    chat = {"chat_id": chat_id or f"{phone.lstrip('+').replace(' ', '')}@s.whatsapp.net", "phone": phone, "name": name or "",
+            "messages": msgs}
+    return client.post("/api/recorder/messages", data={"chat": json.dumps(chat)}, files=uploads,
+                       headers={"Authorization": "Bearer tok"})
+
+
+@pytest.fixture
+def wa(client):
+    return lambda *a, **k: send_whatsapp(client, *a, **k)

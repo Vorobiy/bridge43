@@ -12,7 +12,6 @@ import re
 from datetime import datetime, timezone
 
 from . import db, evidence, gaps, matching, scoring
-from .channels import twilio
 
 STATUSES = ["new", "matched", "in_progress", "delivered", "checked", "cancelled"]
 STATUS_LABELS = {"new": "New", "matched": "Partner found", "in_progress": "In progress", "delivered": "Delivered",
@@ -550,23 +549,16 @@ class SendFailed(Exception):
 
 
 def send(contact_id: int, thread_id: int | None, text: str, who: str, ticket_id: int | None,
-         manual: bool = False, label: str = "Message") -> str:
-    """Send on WhatsApp/SMS (or record that staff sent it from their phone) and log it on the ticket and case."""
+         manual: bool = True, label: str = "Message") -> str:
+    """Record a message staff sent from their own phone (WhatsApp or SMS) on the ticket and in the case."""
     contact = db.get_contact(contact_id)
     if contact["consent_status"] == "opted_out":
         raise SendFailed("This contact opted out.")
     to = contact.get("reply_to") or contact["address"]
-    sid = None
-    if not manual:
-        try:
-            sid = twilio.send_message(to, text.strip())
-        except twilio.SendError as exc:
-            raise SendFailed(str(exc)) from exc
-    how = "sent from a staff phone" if manual else ("WhatsApp" if to.startswith("whatsapp:") else "SMS")
+    how = "sent from a staff phone"
     if thread_id:
         db.add_item(contact_id=contact_id, channel="whatsapp" if to.startswith("whatsapp:") else "sms", kind="text",
-                    direction="out", author=who, body=f"[{label}] {text.strip()}", external_id=sid or None,
-                    status="processed", thread_id=thread_id)
+                    direction="out", author=who, body=f"[{label}] {text.strip()}", status="processed", thread_id=thread_id)
     if ticket_id:
         db.add_event(ticket_id, "message", f"{label} to {contact.get('display_name') or to} ({how}): {text.strip()}", who)
     return how
@@ -574,7 +566,11 @@ def send(contact_id: int, thread_id: int | None, text: str, who: str, ticket_id:
 
 def followups_due(today: str | None = None) -> list[dict]:
     today = today or datetime.now(timezone.utc).date().isoformat()
-    return [{**f, "message": followup_message(f)} for f in db.list_followups(due_by=today, unsent_only=True)]
+    out = []
+    for f in db.list_followups(due_by=today, unsent_only=True):
+        c = db.get_contact(f["contact_id"]) or {}
+        out.append({**f, "message": followup_message(f), "phone": db.phone_of(c.get("reply_to") or c.get("address"))})
+    return out
 
 
 

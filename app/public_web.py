@@ -98,7 +98,7 @@ def whatsapp_link(lang: str, form: str | None) -> str | None:
     """wa.me link to PS43's WhatsApp with a ready-to-send first line, or None if no number is set."""
     from urllib.parse import quote
     from .config import settings
-    number = re.sub(r"\D", "", settings.public_whatsapp or settings.twilio_whatsapp_from or "")
+    number = re.sub(r"\D", "", settings.public_whatsapp or "")
     if len(number) < 8:
         return None
     t = _t(lang)

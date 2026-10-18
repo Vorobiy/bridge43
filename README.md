@@ -1,29 +1,27 @@
 # Bridge43
 
 Intake and AI case drafting for **PS43 Foundation**: every conversation with a school or partner in
-Cameroon (WhatsApp, SMS, calls, field forms) becomes a structured, source-cited case draft that a PS43
+Cameroon (WhatsApp messages and calls, field forms, uploads) becomes a structured, source-cited case draft that a PS43
 staff member checks and approves.
 
 This repo covers the first two steps of the system design:
 
 ```
-1a WhatsApp ─┐
-1b SMS ──────┤                         ┌──────────────────────────────┐
+1a WhatsApp ─┐   (messages read from WhatsApp Desktop by the PS43 Mac app)
+1b Uploads ──┤                         ┌──────────────────────────────┐
 1c Calls ────┼─► convert to text ─────►│ 2. AI summary + human check  │──► approved case (JSON) ─► 3. central database
 1d KoBo ─────┤   (Whisper, Claude      │   SNAP draft with citations  │
-   Uploads ──┘    vision, FFmpeg)      └──────────────────────────────┘
+   Web form ─┘    vision, FFmpeg)      └──────────────────────────────┘
 ```
 
 ## What it does
 
 | Channel | How it arrives | What happens |
 |---|---|---|
-| WhatsApp text, voice notes, photos, videos, PDFs | Twilio webhook (official WhatsApp Business API) | Saved, consent notice sent on first contact, media converted to text |
-| SMS (basic phones) | Same Twilio webhook | Same |
-| Phone calls and WhatsApp calls | Twilio voice webhook | Spoken bilingual recording notice; call is forwarded to a staff phone and recorded, or the caller leaves a recorded message; recording is transcribed with timestamps |
+| WhatsApp text, voice notes, photos, videos, documents, location pins | **Mac menu bar app** (`recorder/`) reads new one-to-one chats in WhatsApp Desktop every 20 s and posts them to `POST /api/recorder/messages` | A chat with a case is added to it; a new chat is screened by the AI and stored only if it is about schools or logistics; media converted to text |
 | Field visits | KoBoToolbox REST service | Form answers and attached photos/audio become items |
 | Exported WhatsApp chats | Staff upload (.zip with media, or .txt) | Parsed (iPhone + Android, English/French exports), each message and attachment becomes an item; re-uploads are de-duplicated |
-| WhatsApp Desktop calls on a PS43 Mac | **Call recorder** (`recorder/`): starts recording when WhatsApp uses the mic, asks who it was when the call ends | Both sides recorded, uploaded to `POST /api/recorder/calls`, transcribed |
+| WhatsApp Desktop calls on a PS43 Mac | Same menu bar app: records when WhatsApp uses the mic | Both sides recorded, uploaded to `POST /api/recorder/calls`, transcribed with timestamps |
 | Laptop calls / Wispr Notetaker / phone notes | Staff form: paste a transcript, add notes, attach recordings or photos | Same pipeline |
 
 **Converters:** voice → Whisper (Groq, OpenAI, or local faster-whisper), photo → Claude vision,
@@ -43,7 +41,7 @@ never mentioned water is not mistaken for one with water. The draft also records
 safe to reach, girls enrolled, teachers paid by parents, pupils without a birth certificate, and whether there is
 an active parents' association.
 
-**Location:** a WhatsApp location pin (Twilio `Latitude`/`Longitude`) is saved as a "Shared location" item and
+**Location:** a WhatsApp location pin (read by the Mac app) is saved as a "Shared location" item and
 becomes the case's map point, cited like any other fact. Map links and KoBo GPS fields work too.
 
 **Trust level:** worked out from the evidence, not by the AI: *self-reported* (messages and calls only),
@@ -51,27 +49,26 @@ becomes the case's map point, cited like any other fact. Map links and KoBo GPS 
 
 **Follow-up questions:** after each draft, Bridge43 checks 14 short profile questions (French and English) and
 proposes a WhatsApp message with only the unanswered ones, at most 3 at a time, most important first (open and
-safe, then name and place, biggest need, pupils, water, toilets...). Staff check and send it from the review
-screen; the answers come back into the case and the next draft fills the profile. Partners, donors and
+safe, then name and place, biggest need, pupils, water, toilets...). Staff open it in WhatsApp from the review
+screen, send it from their phone and click *I sent it*; the answers come back into the case and the next draft fills the profile. Partners, donors and
 unrelated chats get no profile questions. The question bank is in `app/gaps.py`.
 
 **One case per contact:** every contact gets a case number (`PS43-2026-0001`) as soon as they first
-get in touch. Everything they send afterwards, on any channel (WhatsApp texts, voice notes, photos, videos,
-SMS, calls through Twilio or the Mac call recorder, KoBo forms, staff notes), is filed in that same case.
-People are matched by phone number, so the same number on WhatsApp and SMS is one person, and by name
-when there is no number, which covers WhatsApp Desktop calls. Every new message, photo or voice note updates the case: the AI rewrites the draft from the current
+get in touch. Everything they send afterwards (WhatsApp texts, voice notes, photos, videos, calls recorded by the
+Mac app, KoBo forms, uploads, staff notes) is filed in that same case. People are matched by phone number, and by
+name when there is no number, which covers WhatsApp Desktop calls. Every new message, photo or voice note updates the case: the AI rewrites the draft from the current
 record (keeping staff edits), says what changed, and sends the case back to "needs review". Staff
 **close** a case to start a fresh one, and can **move** an item or **merge** two cases when one school used two
 numbers. Search the inbox by case number, name or phone.
 
-**Human check:** staff edit, approve (creates case number `PS43-2026-0001`) or reject, and can send the
-confirmation message back on WhatsApp/SMS. Approved cases are available at `GET /api/cases` for the next stage
+**Human check:** staff edit, approve or reject, and send the confirmation back from their own phone
+(*Open in WhatsApp* / *Open in SMS*, then *I sent it* logs it in the case). Approved cases are available at `GET /api/cases` for the next stage
 (priority matrix): each case comes with `trust`, `profile_complete` (0-100) and `missing_topics`, plus the
 full record under `case` (profile, operating status, location, readiness, numbers, needs).
 
-**Policy and privacy:** official Twilio/Meta APIs only (no unofficial WhatsApp bots); consent notice on first
-contact and at the start of every call; `STOP`/`ARRET` deletes all of a contact's data; optional
-explicit opt-in mode; Twilio signature checks on webhooks; staff login on every screen; the AI is told to
+**Policy and privacy:** no bot writes to anyone: staff send every message themselves; personal chats on the PS43
+laptop are screened out and never stored; group chats are never read; `STOP`/`ARRET` deletes all of a contact's
+data; the Mac app uses its own token; staff login on every screen; the AI is told to
 use only what the sources say and to treat their content as data, not instructions.
 
 ## Part two: from approved case to delivered help
@@ -88,8 +85,9 @@ moves down the matrix once helped. Filter by region. JSON: `GET /api/matrix`.
 **Tickets** (`/tickets`): approving a school creates one ticket per need, with deployment steps for that kind of
 help (survey, 2 quotes, build or deliver, train, school confirms with photos). Status moves New → Partner found →
 In progress → Delivered → Confirmed by school. Every message to a partner or school, note and status change is
-logged on the ticket (communication tracking). Messages go out on WhatsApp/SMS through Twilio, or staff tick
-"I sent it from my phone" to just log it.
+logged on the ticket (communication tracking). Staff send messages from their own phone (*Open in WhatsApp*)
+and click *I sent it* to log them. When the school confirms the last need, the case is **resolved** and joins
+the results log on Impact.
 
 **Partners and donors** (`/partners`): PS43 has no fixed partner list, so the database builds itself. A donor or
 partner who calls or writes is screened and summarised like a school (case type *offer*): who they are, what and
@@ -139,7 +137,7 @@ coloured by box, and the regions with no request yet, where outreach should go.
 median days from first message to delivery, FCFA of over-priced quotes questioned, partners by trust, by region and
 type, confirmed stories, and cost per case from the unit prices entered in Settings.
 
-**Public sign-up**: a "Write on WhatsApp" button (set `PUBLIC_WHATSAPP`, or it uses `TWILIO_WHATSAPP_FROM`) for
+**Public sign-up**: a "Write on WhatsApp" button (set `PUBLIC_WHATSAPP`) for
 voice notes and photos, and a shorter school form (details optional).
 
 **PS43 branding**: all screens and the public sign-up use the PS43 Brand Book colours (green #007A5E, yellow
@@ -164,7 +162,7 @@ uvicorn app.main:app --reload
 
 Open http://localhost:8000. `GET /health` lists anything missing in your configuration.
 
-**Try it without Twilio:** in WhatsApp, open a chat → *Export chat* → *Include media*, then upload
+**Try it without the Mac app:** in WhatsApp, open a chat → *Export chat* → *Include media*, then upload
 the .zip on **Add intake**. Voice notes are transcribed, photos described, and a draft appears ~20 s later.
 
 ### Keys
@@ -173,25 +171,14 @@ the .zip on **Add intake**. Voice notes are transcribed, photos described, and a
 |---|---|---|
 | `ANTHROPIC_API_KEY` | AI drafts, photo/video/PDF descriptions | console.anthropic.com |
 | `TRANSCRIBE_API_KEY` | Voice notes, calls, video sound | console.groq.com (free tier) or platform.openai.com; or `TRANSCRIBE_PROVIDER=local` |
-| `TWILIO_*` | Live WhatsApp/SMS/calls, sending confirmations | twilio.com (WhatsApp sandbox is free to test) |
+| `RECORDER_TOKEN` | The Mac menu bar app (WhatsApp messages and calls) | any long random string, same in `~/.bridge43/recorder.json` |
 | `KOBO_*` | Field forms | kf.kobotoolbox.org → project → Settings → REST Services |
 
-### Run it permanently on a Mac
+### WhatsApp messages and calls
 
-`scripts/mac_services.sh install <your-ngrok-domain>` installs the server, a fixed-address ngrok tunnel
-(free static domain from dashboard.ngrok.com → Domains) and the call recorder as background services:
-they start at login, restart if they crash, and keep the Mac awake. `status`, `logs`, `restart` and
-`uninstall` do what they say. Logs go to `~/Library/Logs/Bridge43/`.
-
-### Connect live channels (Twilio)
-
-1. Expose the server: `cloudflared tunnel --url http://localhost:8000` (or ngrok) and set `PUBLIC_BASE_URL` to that URL.
-2. WhatsApp sender (or sandbox) and SMS number → *When a message comes in*: `POST {PUBLIC_BASE_URL}/webhooks/twilio/messaging`
-3. Voice number / WhatsApp sender voice settings → *A call comes in*: `POST {PUBLIC_BASE_URL}/webhooks/twilio/voice`
-4. KoBoToolbox REST service: `{PUBLIC_BASE_URL}/webhooks/kobo?secret={KOBO_WEBHOOK_SECRET}`
-
-Note: WhatsApp only allows free-form replies within 24 h of the contact's last message; after that a
-pre-approved template is needed (Twilio returns error 63016 and the review screen shows it).
+Build the menu bar app on the PS43 Mac (`cd recorder && ./build_app.sh`, see `recorder/README.md`), give it
+Full Disk Access, Microphone and Screen & System Audio Recording, and point it at this server with the same
+`RECORDER_TOKEN`. It starts at login. KoBoToolbox REST service: `{PUBLIC_BASE_URL}/webhooks/kobo?secret={KOBO_WEBHOOK_SECRET}`.
 
 ## Code map
 
@@ -200,8 +187,8 @@ app/
   main.py               FastAPI app, startup checks
   config.py             all settings (env vars)
   db.py                 SQLite storage: contacts, threads, items, summaries (swap for Postgres/Supabase here)
-  consent.py            notice, opt-in, STOP = delete
-  channels/twilio.py    WhatsApp + SMS + calls + recordings, signature check, outbound messages
+  consent.py            STOP / ARRET = delete everything about a contact
+  triage.py             is a new WhatsApp chat about schools or logistics? (before anything is stored)
   channels/kobo.py      KoBoToolbox submissions
   channels/whatsapp_export.py   parser for WhatsApp "Export chat"
   channels/staff_intake.py      uploads and call notes
@@ -209,7 +196,7 @@ app/
   processing/transcribe.py      Whisper (API or local)
   processing/vision.py          Claude vision for photos, video frames, PDFs
   processing/ffmpeg.py          audio/video helpers
-  recorder_api.py       upload endpoint for the Mac call recorder
+  recorder_api.py       endpoints for the Mac menu bar app: WhatsApp messages, calls, latest cases
   summary.py            SNAP schema + school profile, prompt, citation checks
   gaps.py               follow-up questions (14 for schools, 7 for donors) and which are still unanswered
   scoring.py            need and readiness scores, priority matrix boxes
