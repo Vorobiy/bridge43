@@ -27,15 +27,40 @@
 * { box-sizing: border-box; }
 body { margin: 0; font: 16px/1.5 var(--text); background: var(--bg); color: var(--ink); }
 a { color: var(--accent); }
-header.top { display:flex; align-items:center; gap:20px; padding: 8px 20px; background: var(--green); position: sticky; top:0; z-index:5;
-             border-bottom: 4px solid var(--yellow); }
-header.top .brand { display:flex; align-items:center; gap:10px; text-decoration: none; color: #fff; flex: 0 0 auto; }
-header.top .brand img { height: 44px; width: auto; display: block; }
-header.top .brand span { font-family: var(--display); font-weight: 700; font-size: 22px; letter-spacing: 0; line-height: 1; }
-header.top nav a { margin-right: 16px; text-decoration: none; color: rgba(255,255,255,.82); font-weight: 700; font-size: 15px;
-                   letter-spacing: 0; padding: 6px 0; border-bottom: 3px solid transparent; }
-header.top nav a:hover, header.top nav a.on { color: #fff; border-bottom-color: var(--yellow); }
 main { max-width: 1280px; margin: 0 auto; padding: 20px; }
+/* side navigation */
+.shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 100vh; }
+.sidenav { position: sticky; top: 0; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px;
+  padding: 18px 14px; background: var(--green); border-right: 4px solid var(--yellow); z-index: 5; overflow-y: auto; }
+.sidenav .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #fff; padding: 0 6px 4px; }
+.sidenav .brand img { height: 44px; width: auto; display: block; }
+.sidenav .brand span { font-family: var(--display); font-weight: 700; font-size: 22px; line-height: 1; }
+.sidenav form.search { position: relative; }
+.sidenav form.search input { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.35); color: #fff; padding: 7px 10px 7px 30px; }
+.sidenav form.search input::placeholder { color: rgba(255,255,255,.75); }
+.sidenav form.search .ic { position: absolute; left: 9px; top: 10px; color: #fff; }
+.sidenav nav { display: flex; flex-direction: column; gap: 2px; }
+.sidenav nav a { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; text-decoration: none;
+  color: rgba(255,255,255,.85); font-weight: 700; font-size: 16px; border-left: 4px solid transparent; }
+.sidenav nav a .ic { opacity: .9; }
+.sidenav nav a:hover { background: rgba(255,255,255,.10); color: #fff; }
+.sidenav nav a.on { background: rgba(0,0,0,.18); color: #fff; border-left-color: var(--yellow); }
+.sidenav .foot { margin-top: auto; border-top: 1px solid rgba(255,255,255,.22); padding-top: 10px; }
+.sidenav .foot a { font-size: 14px; font-weight: 600; padding: 8px 12px; }
+.shell > main { width: 100%; box-sizing: border-box; }
+@media (max-width: 900px) {
+  .shell { display: block; }
+  .sidenav { position: sticky; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 14px;
+    border-right: 0; border-bottom: 4px solid var(--yellow); overflow: visible; }
+  .sidenav .brand { padding: 0; } .sidenav .brand img { height: 36px; }
+  .sidenav form.search { flex: 1 1 160px; order: 2; }
+  .sidenav nav { flex-direction: row; order: 3; flex: 1 1 100%; overflow-x: auto; scrollbar-width: none; }
+  .sidenav nav a { padding: 6px 10px; font-size: 14.5px; white-space: nowrap; border-left: 0; border-bottom: 3px solid transparent; border-radius: 6px 6px 0 0; }
+  .sidenav nav a.on { border-bottom-color: var(--yellow); background: transparent; }
+  .sidenav .foot { display: flex; order: 2; margin: 0; padding: 0; border: 0; flex: 0 0 auto; overflow: visible; }
+  .sidenav .foot a { padding: 6px; border: 0; } .sidenav .foot .lbl, .sidenav .foot a[href="/join"] { display: none; }
+}
+
 h1 { font-family: var(--display); font-weight: 700; font-size: 32px; line-height: 1.15; letter-spacing: 0; color: var(--accent); margin: 6px 0 14px; }
 .panel h1 { font-size: 32px; }
 h2 { font-size: 16px; margin: 22px 0 8px; }
@@ -62,7 +87,6 @@ h3 { font-size: 15px; margin: 18px 0 6px; color: var(--ink); font-weight: 700; }
 .b-photo_backed, .b-partially_open, .b-risky { background: var(--warn-soft); color: var(--warn); }
 .b-closed { background: var(--bad); color: #fff; }
 /* part two */
-header.top nav { overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
 .b-new, .b-none, .b-New, .b-first, .b-no_quantity { background: var(--info-soft); }
 .b-matched, .b-single, .b-combined, .b-fair, .b-Verified { background: var(--accent-soft); color: var(--accent); }
 .b-in_progress, .b-partial, .b-low, .b-related { background: var(--warn-soft); color: var(--warn); }
@@ -98,7 +122,6 @@ header.top nav { overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
 .check { display: flex; gap: 8px; align-items: center; font-weight: 400; margin: 6px 0; }
 /* journey, next step, meters, readiness icons, tabs, search */
 .ic { vertical-align: -3px; flex: 0 0 auto; }
-header.top nav a .ic { margin-right: 5px; opacity: .9; }
 .journey { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin: 0 0 16px; }
 .journey .step { position: relative; display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 8px;
   background: var(--panel); border: 1px solid var(--line); color: var(--muted); text-decoration: none; font-weight: 700; font-size: 13px; }
@@ -132,11 +155,6 @@ header.top nav a .ic { margin-right: 5px; opacity: .9; }
   border-bottom: 3px solid transparent; margin-bottom: -2px; }
 .tabs a.on { color: var(--accent); border-bottom-color: var(--green); }
 .tabpane { display: none; } .tabpane.on { display: block; }
-header.top form.search { margin-left: auto; flex: 0 1 220px; position: relative; }
-header.top form.search input { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.35); color: #fff; padding: 6px 10px 6px 30px; }
-header.top form.search input::placeholder { color: rgba(255,255,255,.75); }
-header.top form.search .ic { position: absolute; left: 9px; top: 9px; color: #fff; }
-@media (max-width: 900px) { header.top { flex-wrap: wrap; } header.top form.search { flex: 1 1 100%; order: 3; } }
 details.more-box { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 16px; margin-top: 16px; }
 details.more-box > summary { font-size: 15px; }
 .stepper { list-style: none; padding: 0; margin: 0 0 8px; }
@@ -203,16 +221,19 @@ details > summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
 </style>
 </head>
 <body>
-<header class="top">
+<div class="shell">
+<aside class="sidenav">
   <a class="brand" href="/today"><img src="/static/brand/ps43-logo-white.png" alt="PS43 Foundation"><span>Bridge</span></a>
   {% set here = request.url.path %}
-  <nav><a href="/today" class="{{ 'on' if here.startswith('/today') }}">{{ ui.icon("today") }}Today</a><a href="/" class="{{ 'on' if here == '/' or here.startswith('/threads') or here.startswith('/intake') }}">{{ ui.icon("inbox") }}Inbox</a><a href="/dashboard" class="{{ 'on' if here.startswith('/dashboard') }}">{{ ui.icon("school") }}Schools</a><a href="/tickets" class="{{ 'on' if here.startswith('/tickets') or here.startswith('/matches') }}">{{ ui.icon("needs") }}Needs</a><a href="/partners" class="{{ 'on' if here.startswith('/partners') }}">{{ ui.icon("partners") }}Partners</a><a href="/impact" class="{{ 'on' if here.startswith('/impact') }}">{{ ui.icon("impact") }}Impact</a><a href="/settings" class="{{ 'on' if here.startswith('/settings') }}" title="Settings">{{ ui.icon("settings") }}</a><a href="/join" target="_blank">Sign-up page ↗</a></nav>
   <form class="search" method="get" action="/search" role="search">{{ ui.icon("search", 15) }}<input type="text" name="q" value="{{ request.query_params.get('q', '') if here.startswith('/search') else '' }}" placeholder="Find a school, partner, case…" aria-label="Search"></form>
-</header>
+  <nav aria-label="Main"><a href="/today" class="{{ 'on' if here.startswith('/today') }}">{{ ui.icon("today") }}Today</a><a href="/" class="{{ 'on' if here == '/' or here.startswith('/threads') or here.startswith('/intake') }}">{{ ui.icon("inbox") }}Inbox</a><a href="/dashboard" class="{{ 'on' if here.startswith('/dashboard') }}">{{ ui.icon("school") }}Schools</a><a href="/tickets" class="{{ 'on' if here.startswith('/tickets') or here.startswith('/matches') }}">{{ ui.icon("needs") }}Needs</a><a href="/partners" class="{{ 'on' if here.startswith('/partners') }}">{{ ui.icon("partners") }}Partners</a><a href="/impact" class="{{ 'on' if here.startswith('/impact') }}">{{ ui.icon("impact") }}Impact</a></nav>
+  <nav class="foot" aria-label="More"><a href="/settings" class="{{ 'on' if here.startswith('/settings') }}" title="Settings">{{ ui.icon("settings") }}<span class="lbl">Settings</span></a><a href="/join" target="_blank">Sign-up page ↗</a></nav>
+</aside>
 <main>
 {% if demo_data %}<div class="flash small" style="background:var(--info-soft)"><strong>Demo data.</strong> Every school, person and partner shown here is made up, to show how PS43 would use Bridge.</div>
 {% elif open_mode %}<div class="flash warn small">Development mode: no staff password is set, so these screens are open. Set STAFF_PASSWORD before putting this online.</div>{% endif %}
 {% block body %}{% endblock %}
 </main>
+</div>
 </body>
 </html>

@@ -406,7 +406,7 @@
   {% set ask = d._follow_up.message if d._follow_up else "" %}
   {% set confirm_text = d.confirmation_message.text if d.confirmation_message else "" %}
   {% if ask or confirm_text %}
-  <div class="panel compose" id="message" style="position:sticky; top:84px">
+  <div class="panel compose" id="message" style="position:sticky; top:16px">
     <h2 style="margin-top:0">Message {{ first_name }}</h2>
     <div class="seg" role="group" aria-label="Which message">
       {% if ask %}<button type="button" aria-pressed="true" data-pane="ask">Ask for missing information</button>{% endif %}
