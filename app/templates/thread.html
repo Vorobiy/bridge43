@@ -243,11 +243,11 @@
 
     {% if d.profile and d.case_type != "offer" %}
     {% set known_areas = [] %}{% set unknown_areas = [] %}
-    {% for k in profile_keys %}{% if d.profile[k].status == "unknown" %}{% set _ = unknown_areas.append(k) %}{% else %}{% set _ = known_areas.append(k) %}{% endif %}{% endfor %}
+    {% for k in profile_keys %}{% if (d.profile.get(k) or {}).get("status", "unknown") == "unknown" %}{% set _ = unknown_areas.append(k) %}{% else %}{% set _ = known_areas.append(k) %}{% endif %}{% endfor %}
     <h3>School profile{% if d._follow_up and d._follow_up.complete is not none %} · {{ d._follow_up.complete }}% known{% endif %}</h3>
     {% if known_areas %}
     <div class="profile">
-    {% for k in known_areas %}{% set p = d.profile[k] %}
+    {% for k in known_areas %}{% set p = d.profile.get(k) or {} %}
       <div class="p-{{ p.status }}" title="{{ profile_areas[k] }}"><span class="area">{{ area_labels.get(k, k.replace("_", " "))|capitalize }}</span>
         <span class="badge b-{{ p.status }}">{{ p.status }}</span>
         {% if p.note %}<div class="small muted">{{ p.note }}</div>{% endif %}{{ cites(p.citations) }}</div>
@@ -261,7 +261,7 @@
     <details style="margin-top:12px"><summary class="small">More details</summary>
     {% if d.readiness and d.case_type != "offer" %}
     <h3>Readiness, with sources</h3>
-    <ul class="small">{% for k in readiness_keys %}{% set r = d.readiness[k] %}{% if r.status != "unknown" %}<li>{{ k.replace("_", " ") }}: <strong>{{ r.status }}</strong>{% if r.note %} ({{ r.note }}){% endif %} {{ cites(r.citations) }}</li>{% endif %}{% endfor %}</ul>
+    <ul class="small">{% for k in readiness_keys %}{% set r = d.readiness.get(k) or {} %}{% if r.status and r.status != "unknown" %}<li>{{ k.replace("_", " ") }}: <strong>{{ r.status }}</strong>{% if r.note %} ({{ r.note }}){% endif %} {{ cites(r.citations) }}</li>{% endif %}{% endfor %}</ul>
     {% endif %}
     {% if d.assets %}<h3>They already have</h3><ul class="small">{% for a in d.assets %}<li>{{ a.description }} {{ cites(a.citations) }}</li>{% endfor %}</ul>{% endif %}
     {% if d.plan %}<h3>Plan</h3><ul class="small">{% for p in d.plan %}<li>{{ p.action }} <span class="muted">({{ p.owner }}{% if p.due %}, {{ p.due }}{% endif %})</span> {{ cites(p.citations) }}</li>{% endfor %}</ul>{% endif %}

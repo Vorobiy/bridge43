@@ -69,3 +69,20 @@ def test_inbox_groups_and_plain_words(client, fakes):
     page = client.get("/").text
     assert "Needs you" in page and "Schools" in page and "Partners" in page and "Review" in page
     assert "To review" in page and ("ago" in page or "Oct" in page)
+
+
+def test_case_page_survives_old_drafts_missing_fields(client, fakes):
+    """Drafts written before readiness/profile/number fields existed must still render."""
+    contact = db.get_or_create_contact("whatsapp:+237699123456", "whatsapp", "Old Draft School")
+    thread = db.open_thread_for(contact["id"])
+    db.add_item(contact_id=contact["id"], channel="whatsapp", kind="text", body="hello", thread_id=thread["id"])
+    old = {"case_type": "need", "title": "Old school - roof", "organization": {"name": "Old school", "type": "school"},
+           "situation": {"text": "Roof leaks.", "citations": []},
+           "needs": [{"category": "roofing", "description": "Roof", "quantity": None, "urgency": "high", "citations": []}],
+           "readiness": {"electricity": {"status": "no", "note": None, "citations": []}},
+           "profile": {"water_toilets": {"status": "critical", "note": None, "citations": []}},
+           "numbers": {"students": 100}, "confirmation_message": {"language": "French", "text": "PS43: ..."}}
+    db.add_summary(thread["id"], old, "old", [])
+    r = client.get(f"/threads/{thread['id']}")
+    assert r.status_code == 200 and "Old school" in r.text
+    assert client.get("/dashboard").status_code == 200 and client.get("/").status_code == 200
