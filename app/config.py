@@ -46,7 +46,9 @@ class Settings:
     # True when running on a cloud host: the staff screens then refuse to run without a password
     hosted: bool = field(default_factory=lambda: bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("BRIDGE43_HOSTED")))
 
-    # Staff login for the review screen (HTTP Basic)
+    # Staff login for the staff screens (HTTP Basic). Off by default: anyone with the link can use the site.
+    # Set REQUIRE_LOGIN=true (plus STAFF_PASSWORD) to ask for a username and password again.
+    require_login: bool = field(default_factory=lambda: os.getenv("REQUIRE_LOGIN", "").strip().lower() in ("1", "true", "yes", "on"))
     staff_username: str = field(default_factory=lambda: os.getenv("STAFF_USERNAME", "ps43"))
     staff_password: str = field(default_factory=lambda: os.getenv("STAFF_PASSWORD", ""))
 

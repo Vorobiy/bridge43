@@ -4,6 +4,13 @@ Intake and AI case drafting for **PS43 Foundation**: every conversation with a s
 Cameroon (WhatsApp messages and calls, field forms, uploads) becomes a structured, source-cited case draft that a PS43
 staff member checks and approves.
 
+### Demo (1:10)
+
+[![Watch the Bridge43 demo: a WhatsApp call becomes a case and gets matched to a partner](docs/bridge43-demo.jpg)](docs/bridge43-demo.mp4)
+
+A WhatsApp voice call to PS43 turns into a case in the Inbox, staff approve it, and Bridge43 matches the need to a
+partner. [Watch or download the video](docs/bridge43-demo.mp4).
+
 This repo covers the first two steps of the system design:
 
 ```
@@ -68,7 +75,7 @@ full record under `case` (profile, operating status, location, readiness, number
 
 **Policy and privacy:** no bot writes to anyone: staff send every message themselves; personal chats on the PS43
 laptop are screened out and never stored; group chats are never read; `STOP`/`ARRET` deletes all of a contact's
-data; the Mac app uses its own token; staff login on every screen; the AI is told to
+data; the Mac app uses its own token; the staff screens have no login by default (set `REQUIRE_LOGIN=true` and `STAFF_PASSWORD` to ask for one); the AI is told to
 use only what the sources say and to treat their content as data, not instructions.
 
 ## Part two: from approved case to delivered help

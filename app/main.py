@@ -59,8 +59,10 @@ def config_problems() -> list[str]:
         problems.append("TRANSCRIBE_API_KEY missing: voice notes and calls will fail (or set TRANSCRIBE_PROVIDER=local)")
     if not ffmpeg.available():
         problems.append("ffmpeg not found: audio and video cannot be processed")
-    if not settings.staff_password:
-        problems.append("STAFF_PASSWORD not set: the staff screens are open to anyone who can reach this server")
+    if not settings.require_login:
+        problems.append("no login: the staff screens are open to anyone who can reach this server (REQUIRE_LOGIN=true turns it on)")
+    elif not settings.staff_password:
+        problems.append("REQUIRE_LOGIN is on but STAFF_PASSWORD is not set: the staff screens will refuse to open online")
     if settings.hosted and not os.getenv("RAILWAY_VOLUME_MOUNT_PATH"):
         problems.append("no persistent volume attached: cases are lost on every redeploy (Railway: Attach Volume at /data)")
     return problems

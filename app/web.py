@@ -23,6 +23,8 @@ _basic = HTTPBasic(auto_error=False)
 
 
 def staff(credentials: HTTPBasicCredentials | None = Depends(_basic)) -> str:
+    if not settings.require_login:
+        return "staff"  # no login: the site is open to anyone with the link
     if not settings.staff_password:
         if settings.hosted:
             raise HTTPException(503, "Set STAFF_PASSWORD in the hosting variables before using the inbox online.")
@@ -91,7 +93,7 @@ templates.env.tests["offer_title"] = lambda title: _split_title(title)[1].strip(
 
 
 def _ctx(request: Request, **kw) -> dict:
-    return {"request": request, "settings": settings, "open_mode": not settings.staff_password,
+    return {"request": request, "settings": settings, "open_mode": False,
             "demo_data": bool(db.get_setting("demo_data", False)), **kw}
 
 

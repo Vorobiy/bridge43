@@ -16,7 +16,7 @@ die() { echo "✗ $*" >&2; exit 1; }
 pkill -f "uvicorn app.main:app" 2>/dev/null
 sleep 1
 
-if ! grep -q "^STAFF_PASSWORD=..*" .env; then
+if grep -qi "^REQUIRE_LOGIN=\(1\|true\|yes\|on\)" .env && ! grep -q "^STAFF_PASSWORD=..*" .env; then
   PW="$(openssl rand -base64 12 | tr -d '/+=' | cut -c1-12)"
   printf '\nSTAFF_PASSWORD=%s\n' "$PW" >> .env
   echo "✓ staff login created: username ps43, password $PW (saved in .env)"

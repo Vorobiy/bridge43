@@ -153,6 +153,8 @@ def test_failed_item_shows_and_can_retry(client, monkeypatch):
 
 def test_staff_password(client, monkeypatch):
     monkeypatch.setattr(settings, "staff_password", "pw")
+    assert client.get("/").status_code == 200  # no login by default
+    monkeypatch.setattr(settings, "require_login", True)
     assert client.get("/").status_code == 401
     assert client.get("/", auth=("ps43", "pw")).status_code == 200
     # the laptop's uploads use their own token, not the staff login
@@ -307,7 +309,9 @@ def test_new_message_updates_an_approved_case(client, fakes):
 
 def test_hosted_requires_password_and_uses_railway_domain(client, monkeypatch):
     monkeypatch.setattr(settings, "hosted", True)
-    assert client.get("/").status_code == 503
+    assert client.get("/").status_code == 200  # no login by default, even online
+    monkeypatch.setattr(settings, "require_login", True)
+    assert client.get("/").status_code == 503  # login turned on but no password set
     assert send_whatsapp(client, "+237670000050", "school roof").status_code == 200  # the laptop still gets in
     monkeypatch.setenv("RAILWAY_PUBLIC_DOMAIN", "bridge43-production.up.railway.app")
     monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
