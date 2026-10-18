@@ -1,0 +1,66 @@
+/* PS43 Foundation colours (Brand Book v1.0). Every colour on the site comes from these tints.
+   Green  007A5E · 80% 33957E · 40% 99CABF · 20% CCE4DF
+   Yellow FDBB2F · 80% FDC959 · 40% FEE4AC · 20% FFF1D5
+   Navy   002D62 · 80% 335781 · 40% 99ABC0 · 20% CCD5E0
+   Red    CE1126 · 40% EBA0A8 · 20% F5CFD4
+   Light mode is navy ink on white; dark mode is white ink on navy. The sidebar and header stay brand green
+   in both, so the white PS43 logo is always on green and never disappears. */
+:root {
+  --green: #007A5E; --green-80: #33957E; --green-40: #99CABF; --green-20: #CCE4DF;
+  --yellow: #FDBB2F; --yellow-80: #FDC959; --yellow-40: #FEE4AC; --yellow-20: #FFF1D5;
+  --navy: #002D62; --navy-80: #335781; --navy-40: #99ABC0; --navy-20: #CCD5E0;
+  --red: #CE1126; --red-40: #EBA0A8; --red-20: #F5CFD4;
+
+  color-scheme: light;
+  --bg: color-mix(in srgb, var(--navy-20) 35%, #fff);
+  --panel: #fff;
+  --ink: var(--navy);
+  --muted: var(--navy-80);
+  --line: var(--navy-20);
+  --accent: var(--green);          /* links, titles, text in green */
+  --accent-soft: var(--green-20);
+  --warn: var(--navy);             /* text that sits on yellow */
+  --warn-soft: var(--yellow-20);
+  --bad: var(--red);
+  --bad-soft: var(--red-20);
+  --info-soft: var(--navy-20);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: color-mix(in srgb, var(--navy) 72%, #000);
+    --panel: var(--navy);
+    --ink: #fff;
+    --muted: var(--navy-40);
+    --line: var(--navy-80);
+    --accent: var(--green-40);
+    --accent-soft: color-mix(in srgb, var(--green) 45%, var(--navy));
+    --warn: var(--yellow-80);
+    --warn-soft: color-mix(in srgb, var(--yellow) 22%, var(--navy));
+    --bad: var(--red-40);
+    --bad-soft: color-mix(in srgb, var(--red) 32%, var(--navy));
+    --info-soft: var(--navy-80);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: color-mix(in srgb, var(--navy) 72%, #000);
+  --panel: var(--navy);
+  --ink: #fff;
+  --muted: var(--navy-40);
+  --line: var(--navy-80);
+  --accent: var(--green-40);
+  --accent-soft: color-mix(in srgb, var(--green) 45%, var(--navy));
+  --warn: var(--yellow-80);
+  --warn-soft: color-mix(in srgb, var(--yellow) 22%, var(--navy));
+  --bad: var(--red-40);
+  --bad-soft: color-mix(in srgb, var(--red) 32%, var(--navy));
+  --info-soft: var(--navy-80);
+}
+.theme-toggle .when-dark { display: none; }
+:root[data-theme="dark"] .theme-toggle .when-dark { display: flex; }
+:root[data-theme="dark"] .theme-toggle .when-light { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .when-dark { display: flex; }
+  :root:not([data-theme="light"]) .theme-toggle .when-light { display: none; }
+}

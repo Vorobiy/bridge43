@@ -4,27 +4,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<script>try { if (localStorage.getItem("nav") === "small") document.documentElement.classList.add("nav-small"); } catch (e) {}</script>
+<script>try { if (localStorage.getItem("nav") === "small") document.documentElement.classList.add("nav-small"); const th = localStorage.getItem("theme"); if (th === "light" || th === "dark") document.documentElement.dataset.theme = th; } catch (e) {}</script>
 <title>{% block title %}Bridge43{% endblock %} · PS43 Bridge</title>
 <link rel="icon" type="image/png" href="/static/brand/favicon.png">
+<link rel="stylesheet" href="/static/theme.css">
 {% block head %}{% endblock %}
 <style>
 /* PS43 Foundation brand (Brand Book v1.0): green 007A5E, yellow FDBB2F, navy 002D62, red CE1126.
    Text and titles in Calibri (Carlito, its free twin, is bundled for devices without Calibri): easy to read. */
 @font-face { font-family: "Carlito"; font-weight: 400; font-display: swap; src: local("Calibri"), url("/static/fonts/Carlito-Regular.woff2") format("woff2"); }
 @font-face { font-family: "Carlito"; font-weight: 700; font-display: swap; src: local("Calibri Bold"), local("Calibri-Bold"), url("/static/fonts/Carlito-Bold.woff2") format("woff2"); }
-:root {
-  --green: #007A5E; --yellow: #FDBB2F; --navy: #002D62; --red: #CE1126;
-  --display: Calibri, Carlito, "Segoe UI", Arial, sans-serif; --text: Calibri, Carlito, "Segoe UI", Arial, sans-serif;
-  --bg: #f0f0f0; --panel: #ffffff; --ink: #111111; --muted: #55605b; --line: #d9dddb;
-  --accent: #007A5E; --accent-soft: #dff0eb; --warn: #8a5a00; --warn-soft: #fff0cc;
-  --bad: #CE1126; --bad-soft: #fbe2e5; --info-soft: #e3e9f1; --radius: 10px;
-}
-@media (prefers-color-scheme: dark) {
-  :root { --bg:#0b1626; --panel:#11213a; --ink:#eef1f4; --muted:#a6b1c0; --line:#24364f;
-          --accent:#3cc59d; --accent-soft:#123a35; --warn:#FDBB2F; --warn-soft:#3a3014;
-          --bad:#ff5a6e; --bad-soft:#3d1a22; --info-soft:#162b48; }
-}
+:root { --display: Calibri, Carlito, "Segoe UI", Arial, sans-serif; --text: Calibri, Carlito, "Segoe UI", Arial, sans-serif; --radius: 10px; }
 * { box-sizing: border-box; }
 body { margin: 0; font: 16px/1.5 var(--text); background: var(--bg); color: var(--ink); }
 a { color: var(--accent); }
@@ -49,6 +39,7 @@ main { max-width: 1280px; margin: 0 auto; padding: 20px; }
   .nav-small .sidenav form.search input::placeholder { color: transparent; }
   .nav-small .sidenav form.search .ic { left: 14px; pointer-events: none; }
   .nav-small .sidenav .foot { width: 100%; }
+  .nav-small .theme-toggle { justify-content: center; padding: 10px; border-left: 0; }
 }
 @media (max-width: 900px) { .nav-toggle { display: none; } }
 /* side navigation */
@@ -69,7 +60,10 @@ main { max-width: 1280px; margin: 0 auto; padding: 20px; }
 .sidenav nav a:hover { background: rgba(255,255,255,.10); color: #fff; }
 .sidenav nav a.on { background: rgba(0,0,0,.18); color: #fff; border-left-color: var(--yellow); }
 .sidenav .foot { margin-top: auto; border-top: 1px solid rgba(255,255,255,.22); padding-top: 10px; }
-.sidenav .foot a { font-size: 14px; font-weight: 600; padding: 8px 12px; }
+.sidenav .foot a, .theme-toggle { font-size: 14px; font-weight: 600; padding: 8px 12px; }
+.theme-toggle { display: flex; width: 100%; background: transparent; border: 0; border-left: 4px solid transparent; border-radius: 10px; color: rgba(255,255,255,.85); cursor: pointer; text-align: left; font-family: inherit; }
+.theme-toggle > span { display: flex; align-items: center; gap: 12px; }
+.theme-toggle:hover { background: rgba(255,255,255,.10); color: #fff; }
 .shell > main { width: 100%; box-sizing: border-box; }
 @media (max-width: 900px) {
   .shell { display: block; }
@@ -81,7 +75,7 @@ main { max-width: 1280px; margin: 0 auto; padding: 20px; }
   .sidenav nav a { padding: 6px 10px; font-size: 14.5px; white-space: nowrap; border-left: 0; border-bottom: 3px solid transparent; border-radius: 6px 6px 0 0; }
   .sidenav nav a.on { border-bottom-color: var(--yellow); background: transparent; }
   .sidenav .foot { display: flex; order: 2; margin: 0; padding: 0; border: 0; flex: 0 0 auto; overflow: visible; }
-  .sidenav .foot a { padding: 6px; border: 0; } .sidenav .foot .lbl, .sidenav .foot a[href="/join"] { display: none; }
+  .sidenav .foot a, .theme-toggle { padding: 6px; border: 0; width: auto; } .sidenav .foot .lbl, .sidenav .foot a[href="/join"] { display: none; }
 }
 
 h1 { font-family: var(--display); font-weight: 700; font-size: 32px; line-height: 1.15; letter-spacing: 0; color: var(--accent); margin: 6px 0 14px; }
@@ -114,7 +108,7 @@ h3 { font-size: 15px; margin: 18px 0 6px; color: var(--ink); font-weight: 700; }
 .b-matched, .b-single, .b-combined, .b-fair, .b-Verified { background: var(--accent-soft); color: var(--accent); }
 .b-in_progress, .b-partial, .b-low, .b-related { background: var(--warn-soft); color: var(--warn); }
 .b-delivered, .b-covered { background: var(--accent-soft); color: var(--accent); }
-.b-checked, .b-Trusted { background: var(--accent); color: #fff; }
+.b-checked, .b-Trusted { background: var(--green); color: #fff; }
 .b-cancelled { background: var(--bad-soft); color: var(--bad); }
 .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
 .kpis > div { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; }
@@ -128,7 +122,7 @@ h3 { font-size: 15px; margin: 18px 0 6px; color: var(--ink); font-weight: 700; }
 .card a.title:hover { color: var(--accent); }
 .pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); margin: 2px 2px 0 0; }
 .meter { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
-.meter > i { display: block; height: 100%; background: var(--accent); }
+.meter > i { display: block; height: 100%; background: var(--green); }
 .q-act_now { --q: var(--red); --qt: #fff; } .q-prepare_first { --q: var(--yellow); --qt: #111; }
 .q-quick_wins { --q: var(--green); --qt: #fff; } .q-monitor { --q: var(--navy); --qt: #fff; }
 .q-safety_hold { --q: #111; --qt: #fff; }
@@ -240,7 +234,7 @@ label { display: block; font-weight: 600; font-size: 13px; margin: 10px 0 4px; }
 .row { display: flex; gap: 12px; flex-wrap: wrap; } .row > * { flex: 1 1 200px; }
 details > summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
 .cite { display:inline-block; font-size: 11px; font-weight: 700; padding: 0 5px; margin-left: 3px; border-radius: 5px; background: var(--info-soft); color: var(--accent); text-decoration: none; vertical-align: 1px; }
-.cite:hover { background: var(--accent); color: #fff; }
+.cite:hover { background: var(--green); color: #fff; }
 </style>
 </head>
 <body>
@@ -251,7 +245,7 @@ details > summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
   {% set here = request.url.path %}
   <form class="search" method="get" action="/search" role="search">{{ ui.icon("search", 15) }}<input type="text" name="q" value="{{ request.query_params.get('q', '') if here.startswith('/search') else '' }}" placeholder="Find a school, partner, case…" aria-label="Search"></form>
   <nav aria-label="Main"><a href="/today" class="{{ 'on' if here.startswith('/today') }}" title="Today">{{ ui.icon("today") }}<span class="lbl">Today</span></a><a href="/" class="{{ 'on' if here == '/' or here.startswith('/threads') or here.startswith('/intake') }}" title="Inbox">{{ ui.icon("inbox") }}<span class="lbl">Inbox</span></a><a href="/dashboard" class="{{ 'on' if here.startswith('/dashboard') }}" title="Schools">{{ ui.icon("school") }}<span class="lbl">Schools</span></a><a href="/tickets" class="{{ 'on' if here.startswith('/tickets') or here.startswith('/matches') }}" title="Needs">{{ ui.icon("needs") }}<span class="lbl">Needs</span></a><a href="/partners" class="{{ 'on' if here.startswith('/partners') }}" title="Partners">{{ ui.icon("partners") }}<span class="lbl">Partners</span></a><a href="/impact" class="{{ 'on' if here.startswith('/impact') }}" title="Impact">{{ ui.icon("impact") }}<span class="lbl">Impact</span></a></nav>
-  <nav class="foot" aria-label="More"><a href="/settings" class="{{ 'on' if here.startswith('/settings') }}" title="Settings">{{ ui.icon("settings") }}<span class="lbl">Settings</span></a><a href="/join" target="_blank" title="Sign-up page">{{ ui.icon("arrow") }}<span class="lbl">Sign-up page ↗</span></a></nav>
+  <nav class="foot" aria-label="More"><button type="button" class="theme-toggle" id="themetoggle" title="Switch light or dark"><span class="when-light">{{ ui.icon("moon") }}<span class="lbl">Dark mode</span></span><span class="when-dark">{{ ui.icon("sun") }}<span class="lbl">Light mode</span></span></button><a href="/settings" class="{{ 'on' if here.startswith('/settings') }}" title="Settings">{{ ui.icon("settings") }}<span class="lbl">Settings</span></a><a href="/join" target="_blank" title="Sign-up page">{{ ui.icon("arrow") }}<span class="lbl">Sign-up page ↗</span></a></nav>
 </aside>
 <main>
 {% if demo_data %}<div class="flash small" style="background:var(--info-soft)"><strong>Demo data.</strong> Every school, person and partner shown here is made up, to show how PS43 would use Bridge.</div>
@@ -270,6 +264,12 @@ details > summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
   }
   if (btn) { set(root.classList.contains("nav-small")); btn.addEventListener("click", () => set(!root.classList.contains("nav-small"))); }
   // in the small menu, the search icon opens the menu and puts the cursor in the box
+  const tt = document.getElementById("themetoggle");
+  if (tt) tt.addEventListener("click", () => {
+    const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem("theme", root.dataset.theme); } catch (e) {}
+  });
   const q = document.querySelector(".sidenav form.search input");
   if (q) q.addEventListener("focus", () => { if (root.classList.contains("nav-small") && window.innerWidth > 900) set(false); });
 })();
