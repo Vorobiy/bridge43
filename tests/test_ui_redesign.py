@@ -43,7 +43,7 @@ def test_case_page_suggests_matches_and_uses_them(client, fakes):
             break
     assert rows, "the demo has a school with a ready match"
     page = client.get(f"/threads/{tid}").text
-    assert "Suggested matches" in page and "Use this match" in page
+    assert "pop-matches" in page and "Use this match" in page  # the matches popup
     r = next(r for r in rows if r["exact"] and r["picks"])
     resp = client.post(f"/tickets/{r['ticket']['id']}/assign-plan", data={"back": f"/threads/{tid}"}, follow_redirects=False)
     assert resp.status_code == 303 and resp.headers["location"].startswith(f"/threads/{tid}")
@@ -168,3 +168,20 @@ def test_startup_resolves_cases_confirmed_before_the_update(client, fakes):
     delivered = max(k["delivered_at"] for k in db.list_tickets(thread_id=t["id"]))
     assert t2["status"] == "resolved" and t2["resolved_at"] == delivered
     assert workflow.refresh_all_cases() == 0  # nothing left to change
+
+
+def test_approving_opens_the_matches_popup(client, fakes):
+    _seed()
+    draft = next(t for t in db.list_threads() if t["status"] == "draft_ready")
+    s = db.latest_summary(draft["id"])
+    r = client.post(f"/summaries/{s['id']}/approve", data={"notes": ""}, follow_redirects=False)
+    assert "approved=1" in r.headers["location"]
+    page = client.get(r.headers["location"]).text
+    if any(m["exact"] and m["picks"] for m in workflow.case_matches(draft["id"])):
+        assert "Approved. These partners can help" in page and "pm.showModal()" in page
+    # using a match from the popup comes back to the case with the popup open for the rest
+    m = next((m for m in workflow.case_matches(draft["id"]) if m["exact"] and m["picks"]), None)
+    if m:
+        r = client.post(f"/tickets/{m['ticket']['id']}/assign-plan", data={"back": f"/threads/{draft['id']}?matches=1"},
+                        follow_redirects=False)
+        assert r.headers["location"].startswith(f"/threads/{draft['id']}?matches=1&msg=")

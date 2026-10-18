@@ -39,7 +39,7 @@ main { max-width: 1280px; margin: 0 auto; padding: 20px; }
 h1 { font-family: var(--display); font-weight: 700; font-size: 32px; line-height: 1.15; letter-spacing: 0; color: var(--accent); margin: 6px 0 14px; }
 .panel h1 { font-size: 32px; }
 h2 { font-size: 16px; margin: 22px 0 8px; }
-h3 { font-size: 14px; margin: 16px 0 6px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+h3 { font-size: 15px; margin: 18px 0 6px; color: var(--ink); font-weight: 700; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
@@ -157,7 +157,24 @@ details.more-box > summary { font-size: 15px; }
 .flash.warn { background: var(--warn-soft); color: var(--warn); }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+th { font-size: 13px; font-weight: 600; color: var(--muted); }
+:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+/* shared: tabs inside a page, dialog (popup), progress rail */
+.ptabs { display: flex; gap: 2px; border-bottom: 2px solid var(--line); margin: 18px 0 16px; overflow-x: auto; }
+.ptabs button { background: none; border: 0; border-bottom: 3px solid transparent; border-radius: 0; margin-bottom: -2px;
+  padding: 10px 16px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.ptabs button[aria-selected=true] { color: var(--ink); border-bottom-color: var(--green); }
+.ptabs button .n { font-weight: 600; color: var(--muted); margin-left: 4px; }
+.ppane[hidden] { display: none; }
+dialog.pop { border: 0; border-radius: 16px; padding: 0; width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 64px);
+  background: var(--panel); color: var(--ink); box-shadow: 0 24px 64px rgba(0,0,0,.35); }
+dialog.pop::backdrop { background: rgba(0, 45, 98, .45); }
+dialog.pop .pop-head { padding: 20px 22px 6px; }
+dialog.pop .pop-head h2 { margin: 0; font-size: 22px; }
+dialog.pop .pop-body { padding: 6px 22px 8px; overflow-y: auto; max-height: calc(100vh - 220px); }
+dialog.pop .pop-foot { padding: 14px 22px 20px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); }
+@media (prefers-reduced-motion: no-preference) { dialog.pop[open] { animation: pop-in .18s ease-out; } }
+@keyframes pop-in { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
 tr.clickable { cursor: pointer; } tr.clickable:hover { background: var(--bg); }
 button, .btn { font: inherit; font-weight: 600; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; text-decoration: none; display: inline-block; }
 button.primary, .btn.primary { background: var(--green); border-color: var(--green); color: #fff; }

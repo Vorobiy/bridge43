@@ -1,134 +1,176 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
-{% macro cites(c) %}{% for i in c or [] %}<a class="cite" href="#item-{{ i }}" title="Jump to source I{{ i }}">I{{ i }}</a>{% endfor %}{% endmacro %}
+{% macro cites(c) %}{% for i in c or [] %}<a class="cite" href="#item-{{ i }}" title="See the message this comes from">I{{ i }}</a>{% endfor %}{% endmacro %}
 {% block title %}{{ thread.title or contact.display_name or contact.address }}{% endblock %}
 {% block head %}
 {% if in_flight %}<meta http-equiv="refresh" content="5">{% endif %}
 <style>
-.case-head { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
-.case-head .who { flex: 1 1 420px; }
-.case-head h1 { margin: 0 0 4px; }
-.case-head .sub { color: var(--muted); font-size: 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.status-chip { font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--line); color: var(--ink); }
-.status-chip.s-draft_ready { background: var(--yellow); color: #111; } .status-chip.s-approved { background: var(--green); color: #fff; }
-.status-chip.s-open { background: var(--info-soft); } .status-chip.s-resolved { background: var(--navy); color: #fff; }
-/* needs with progress (the case's work) */
-.work { list-style: none; padding: 0; margin: 0; }
-.work li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
-.work li:first-child { border-top: 0; }
-.work .t { font-weight: 700; } .work .s { font-size: 13px; color: var(--muted); margin-top: 2px; }
-.work .prog { display: inline-block; width: 80px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; vertical-align: middle; margin-right: 6px; }
-.work .prog i { display: block; height: 100%; background: var(--green); }
-.work .st { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--info-soft); }
-.work .st.checked { background: var(--green); color: #fff; } .work .st.delivered { background: var(--yellow); color: #111; }
-.work .st.cancelled { background: var(--line); color: var(--muted); }
-.history { list-style: none; padding: 0; margin: 0; font-size: 13.5px; }
-.history li { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; padding: 5px 0; border-top: 1px solid var(--line); }
-.history li:first-child { border-top: 0; }
-.history .when { color: var(--muted); font-size: 12.5px; }
-.history .k-resolved, .history .k-approved { font-weight: 700; color: var(--accent); }
-.case-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.case-actions details { position: relative; }
-.case-actions details > summary { list-style: none; margin: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-weight: 600; }
-.case-actions details > summary::-webkit-details-marker { display: none; }
-.case-actions .menu { position: absolute; right: 0; top: 44px; z-index: 4; width: 320px; background: var(--panel); border: 1px solid var(--line);
-  border-radius: 10px; padding: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 8px; }
-.case-actions .menu button { width: 100%; text-align: left; }
-.layout { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); gap: 20px; align-items: start; }
-@media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
-.sources { position: sticky; top: 76px; max-height: calc(100vh - 96px); overflow-y: auto; }
-@media (max-width: 960px) { .sources { position: static; max-height: none; } }
-.sources h2 { display: flex; justify-content: space-between; align-items: baseline; }
-.item { border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; margin-bottom: 8px; background: var(--panel); scroll-margin-top: 80px; }
-.item.out { background: var(--bg); border-style: dashed; }
-.item:target { outline: 3px solid var(--accent); }
-.item .meta { font-size: 12px; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 4px; }
+/* ---------- header ---------- */
+.case-top { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin: 4px 0 18px; }
+.case-top .who { flex: 1 1 420px; min-width: 0; }
+.case-top h1 { margin: 0 0 6px; font-size: 34px; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: 15px; align-items: center; }
+.facts b { color: var(--ink); font-weight: 700; }
+.state { font-size: 13px; font-weight: 700; padding: 3px 11px; border-radius: 999px; background: var(--line); color: var(--ink); }
+.state.s-draft_ready { background: var(--yellow); color: #111; } .state.s-approved { background: var(--green); color: #fff; }
+.state.s-resolved { background: var(--navy); color: #fff; } .state.s-open { background: var(--info-soft); }
+.case-top .acts { display: flex; gap: 8px; align-items: center; }
+.menu-wrap { position: relative; }
+.menu-wrap > summary { list-style: none; margin: 0; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-weight: 600; cursor: pointer; }
+.menu-wrap > summary::-webkit-details-marker { display: none; }
+.menu-wrap .menu { position: absolute; right: 0; top: 46px; z-index: 6; width: 300px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.22); display: grid; gap: 6px; }
+.menu-wrap .menu button { width: 100%; text-align: left; border-color: transparent; }
+.menu-wrap .menu button:hover { background: var(--bg); }
+
+/* ---------- the progress rail: where this case stands ---------- */
+.rail { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); margin: 0 0 6px; counter-reset: s; }
+.rail li { list-style: none; position: relative; padding-top: 22px; font-size: 13px; color: var(--muted); text-align: center; }
+.rail li::before { content: ""; position: absolute; top: 6px; left: 0; right: 0; height: 4px; background: var(--line); }
+.rail li:first-child::before { left: 50%; } .rail li:last-child::before { right: 50%; }
+.rail li::after { content: ""; position: absolute; top: 0; left: 50%; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%;
+  background: var(--panel); border: 3px solid var(--line); box-sizing: border-box; }
+.rail li.done::before, .rail li.now::before { background: var(--green); }
+.rail li.now ~ li::before { background: var(--line); }
+.rail li.done::after { background: var(--green); border-color: var(--green); }
+.rail li.now::after { background: var(--yellow); border-color: var(--green); width: 20px; height: 20px; margin-left: -10px; top: -2px; }
+.rail li.now { color: var(--ink); font-weight: 700; }
+.rail { padding: 0; }
+@media (max-width: 640px) { .rail li { font-size: 0; } .rail li.now { font-size: 12px; } }
+
+/* ---------- summary ---------- */
+.sum { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
+@media (max-width: 960px) { .sum { grid-template-columns: 1fr; } }
+.lead { font-size: 18px; line-height: 1.55; margin: 0 0 14px; max-width: 72ch; }
+.figures { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 0 0 18px; }
+.figures div { display: flex; flex-direction: column; }
+.figures strong { font-size: 30px; line-height: 1; font-weight: 700; }
+.figures span { font-size: 13px; color: var(--muted); margin-top: 3px; }
+.gaps { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 6px; }
+.gap { display: inline-flex; flex-direction: column; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); max-width: 260px; }
+.gap b { font-size: 14px; } .gap small { color: var(--muted); font-size: 12.5px; line-height: 1.35; }
+.gap.critical { border-color: var(--bad); background: var(--bad-soft); } .gap.critical b { color: var(--bad); }
+.gap.partial { border-color: var(--yellow); background: var(--warn-soft); }
+.quiet { color: var(--muted); font-size: 14px; margin: 6px 0 0; }
+.flags { background: var(--bad-soft); color: var(--bad); border-radius: 10px; padding: 10px 14px; margin: 0 0 14px; }
+.side { display: grid; gap: 14px; }
+.side .panel h2 { margin: 0 0 6px; font-size: 16px; }
+.prio { border-left: 6px solid var(--q); }
+.prio .tag { display: inline-block; font-weight: 700; padding: 2px 10px; border-radius: 999px; background: var(--q); color: var(--qt); font-size: 13px; }
+.needs-mini { list-style: none; margin: 0; padding: 0; }
+.needs-mini li { padding: 8px 0; border-top: 1px solid var(--line); display: flex; gap: 8px; align-items: baseline; }
+.needs-mini li:first-child { border-top: 0; }
+.needs-mini .q { margin-left: auto; color: var(--muted); font-size: 13.5px; white-space: nowrap; }
+
+/* ---------- needs ---------- */
+.need { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 14px 0; border-top: 1px solid var(--line); }
+.need:first-child { border-top: 0; }
+.need .t { font-weight: 700; font-size: 16px; }
+.need .s { color: var(--muted); font-size: 14px; margin-top: 3px; }
+.need .bar { display: inline-block; width: 90px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; vertical-align: middle; margin-right: 6px; }
+.need .bar i { display: block; height: 100%; background: var(--green); }
+.need .suggest { margin-top: 6px; font-size: 14px; }
+.st { font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--info-soft); margin-left: 6px; vertical-align: 2px; }
+.st.checked { background: var(--green); color: #fff; } .st.delivered { background: var(--yellow); color: #111; } .st.cancelled { background: var(--line); color: var(--muted); }
+
+/* ---------- messages ---------- */
+.msgs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 960px) { .msgs { grid-template-columns: 1fr; } }
+.item { border-radius: 12px; padding: 10px 13px; margin-bottom: 10px; background: var(--panel); border: 1px solid var(--line); scroll-margin-top: 90px; max-width: 92%; }
+.item.out { margin-left: auto; background: var(--accent-soft); border-color: transparent; }
+.item:target, .item.hl { outline: 3px solid var(--yellow); }
+.item .meta { font-size: 12px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 4px; }
 .item .id { font-weight: 700; color: var(--accent); }
-.item img, .item video { max-width: 100%; max-height: 220px; border-radius: 6px; display: block; margin: 6px 0; }
+.item img, .item video { max-width: 100%; max-height: 240px; border-radius: 8px; display: block; margin: 6px 0; }
 .item audio { width: 100%; margin: 6px 0; }
+.item .body { white-space: pre-wrap; }
+.item .extracted { white-space: pre-wrap; font-size: 13.5px; color: var(--ink); opacity: .85; border-left: 3px solid var(--line); padding-left: 10px; margin-top: 4px; }
 .item .tools { font-size: 12px; margin-top: 4px; }
 .item .tools summary { margin: 0; font-weight: 500; color: var(--muted); display: inline; }
-.extracted { white-space: pre-wrap; font-size: 13.5px; border-left: 3px solid var(--line); padding-left: 10px; margin-top: 4px; }
-.extracted summary { font-size: 12px; color: var(--muted); margin: 0; font-weight: 600; }
-.body { white-space: pre-wrap; }
-.flags { background: var(--bad-soft); color: var(--bad); border-radius: 8px; padding: 10px 14px; margin: 10px 0; }
-.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.kv { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 4px; }
-.kv div { background: var(--bg); border-radius: 10px; padding: 8px 14px; min-width: 96px; }
-.kv strong { display: block; font-size: 24px; line-height: 1.1; }
-.kv span { font-size: 12.5px; color: var(--muted); }
-.needs-list { list-style: none; padding: 0; margin: 0; }
-.needs-list li { display: flex; gap: 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); }
-.needs-list li:last-child { border-bottom: 0; }
-.needs-list .n-what { flex: 1; }
-.needs-list .n-qty { color: var(--muted); font-size: 14px; white-space: nowrap; }
-.profile { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
-.profile > div { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
-.profile > div.p-critical { border-color: var(--bad); }
-.profile .area { font-weight: 700; font-size: 14px; }
-.priority { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; border-left: 8px solid var(--q); }
-.priority .why { flex: 1 1 300px; margin: 0; font-size: 14.5px; }
-/* matches */
-.matches { border: 2px solid var(--green); }
-.matches .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--accent); }
-.matches h2 { margin: 2px 0 10px; font-size: 20px; }
-.match-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
-.match-row .need { font-weight: 700; }
-.match-row .who { margin-top: 2px; font-size: 14.5px; }
-.match-row .who .arrow { color: var(--muted); margin: 0 4px; }
-.match-row .why2 { font-size: 12.5px; color: var(--muted); }
-/* messaging */
-.msg-tabs { display: flex; gap: 6px; margin: 0 0 10px; flex-wrap: wrap; }
-.msg-tabs button { border-radius: 999px; padding: 6px 14px; }
-.msg-tabs button.on { background: var(--green); border-color: var(--green); color: #fff; }
-.msg-pane { display: none; } .msg-pane.on { display: block; }
-.msg-pane .hint { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
-.send-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
-.send-row .sep { flex: 1; }
-.decide { border: 2px solid var(--yellow); }
-.decide-top { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.decide-top .txt { flex: 1 1 260px; }
-.decide-top .txt strong { font-size: 17px; display: block; }
+@media (hover: hover) { .item .tools:not([open]) { opacity: 0; } .item:hover .tools, .item .tools:focus-within { opacity: 1; } }
+.compose .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; margin-bottom: 10px; }
+.compose .seg button { border: 0; border-radius: 999px; padding: 6px 14px; background: none; }
+.compose .seg button[aria-pressed=true] { background: var(--green); color: #fff; }
+.compose .hint { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
+.compose .row2 { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.compose .row2 .grow { flex: 1; }
+
+/* ---------- activity ---------- */
+.history { list-style: none; padding: 0; margin: 0; max-width: 760px; }
+.history li { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.history li:first-child { border-top: 0; }
+.history .when { color: var(--muted); font-size: 13px; }
+.history .k-resolved, .history .k-approved { font-weight: 700; color: var(--accent); }
+
+/* ---------- review bar (drafts) ---------- */
+.review-bar { position: sticky; bottom: 0; z-index: 4; margin: 24px -20px -20px; padding: 14px 20px; background: var(--panel);
+  border-top: 3px solid var(--yellow); box-shadow: 0 -8px 24px rgba(0,0,0,.12); }
+.review-bar form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; max-width: 1240px; margin: 0 auto; }
+.review-bar .ask { flex: 1 1 260px; }
+.review-bar .ask strong { display: block; font-size: 16px; }
+.review-bar input[name=notes] { flex: 0 1 260px; }
+
+/* ---------- matches popup ---------- */
+.mrow { padding: 14px 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.mrow:first-child { border-top: 0; }
+.mrow .need-name { font-weight: 700; }
+.mrow .who { margin-top: 3px; }
+.mrow .why { font-size: 13px; color: var(--muted); margin-top: 2px; }
 </style>
 {% endblock %}
 {% block body %}
 {% set d = summary.data if summary else {} %}
 {% set STATUS = {"open":"Collecting","draft_ready":"Ready to review","approved":"In progress","resolved":"Resolved","closed":"Closed","rejected":"Rejected","not_relevant":"Not relevant"} %}
 {% set first_name = (contact.display_name or "the contact").split("(")[0].strip() %}
-<p class="small" style="margin:0 0 6px"><a href="/">← Inbox</a></p>
+{% set org = d.organization if d and d.organization else {} %}
+{% set is_partner_case = d and (d.case_type == "offer" or org.type == "donor") %}
+{% set good_matches = matches|selectattr("exact")|selectattr("picks")|list %}
+{% set show_pop = good_matches and (request.query_params.get('approved') or request.query_params.get('matches')) %}
 
-<div class="case-head">
+<p class="small" style="margin:0"><a href="/">← Inbox</a></p>
+
+{# ---------------- header ---------------- #}
+<div class="case-top">
   <div class="who">
-    <h1>{{ (d.organization.name if d and d.organization and d.organization.name) or contact.display_name or contact.address }}</h1>
-    <div class="sub">
-      <span class="status-chip s-{{ thread.status }}">{{ STATUS[thread.status] }}</span>
-      {% if contact.display_name %}<span>{{ contact.display_name }}</span>{% endif %}
+    <h1>{{ org.name or contact.display_name or contact.address }}</h1>
+    <div class="facts">
+      <span class="state s-{{ thread.status }}">{{ STATUS[thread.status] }}</span>
+      {% if org.town or org.region %}<span>{{ [org.town, org.region]|select|join(", ") }}</span>{% endif %}
+      {% if d and d.numbers and d.numbers.students %}<span><b>{{ d.numbers.students }}</b> pupils</span>{% endif %}
+      {% if contact.display_name %}<span>{{ contact.display_name.split("(")[0].strip() }}</span>{% endif %}
       {% if phone %}<span>{{ phone }}</span>{% endif %}
       <span>{{ thread.case_number }}</span>
-      {% if d and d.organization and (d.organization.town or d.organization.region) %}<span>{{ [d.organization.town, d.organization.region]|select|join(", ") }}</span>{% endif %}
-      {% if d and d.location and d.location.latitude is not none %}<a href="https://maps.google.com/?q={{ d.location.latitude }},{{ d.location.longitude }}" target="_blank" rel="noopener">{{ ui.icon("map", 14) }} map</a>{% endif %}
-      {% if contact.consent_status == "opted_out" %}<span style="color:var(--bad)">opted out</span>{% endif %}
+      {% if d and d.location and d.location.latitude is not none %}<a href="https://maps.google.com/?q={{ d.location.latitude }},{{ d.location.longitude }}" target="_blank" rel="noopener">{{ ui.icon("map", 14) }} Map</a>{% endif %}
+      {% if contact.consent_status == "opted_out" %}<span style="color:var(--bad)">Opted out</span>{% endif %}
     </div>
   </div>
-  <div class="case-actions">
-    {% if summary and summary.status == "draft" %}<a class="btn primary" href="#decide">Review and approve</a>{% endif %}
-    <details><summary>More ▾</summary>
-      <div class="menu small">
+  <div class="acts">
+    {% if summary and summary.status == "draft" %}
+      <a class="btn primary" href="#review">Review and approve</a>
+    {% elif good_matches %}
+      <button class="primary" type="button" data-open-pop="matches">See {{ good_matches|length }} match{{ "" if good_matches|length == 1 else "es" }}</button>
+    {% elif thread.status == "resolved" %}
+      <a class="btn primary" href="/impact">See it on Impact</a>
+    {% elif partner %}
+      <a class="btn primary" href="/partners/{{ partner.id }}">Open partner</a>
+    {% endif %}
+    <details class="menu-wrap"><summary>More</summary>
+      <div class="menu">
         {% if thread.status == "not_relevant" %}
-          <form method="post" action="/threads/{{ thread.id }}/relevance"><input type="hidden" name="relevant" value="yes"><button class="primary" type="submit">This is a school case</button></form>
+          <form method="post" action="/threads/{{ thread.id }}/relevance"><input type="hidden" name="relevant" value="yes"><button type="submit">This is a school case</button></form>
         {% elif thread.status not in ("closed", "rejected") %}
           <form method="post" action="/threads/{{ thread.id }}/relevance"><input type="hidden" name="relevant" value="no"><button type="submit">Not relevant</button></form>
         {% endif %}
+        {% if summary %}<form method="post" action="/threads/{{ thread.id }}/summarize" onsubmit="return confirm('Write a new AI draft from all messages?')"><button type="submit" {% if in_flight %}disabled{% endif %}>Rewrite the AI draft{% if new_since %} ({{ new_since|length }} new){% endif %}</button></form>{% endif %}
         {% if thread.status in ("closed", "rejected") %}
           <form method="post" action="/threads/{{ thread.id }}/reopen"><button type="submit">Reopen case</button></form>
         {% else %}
           <form method="post" action="/threads/{{ thread.id }}/close" onsubmit="return confirm('Close this case? Their next message will open a new case.')"><button type="submit">Close case</button></form>
         {% endif %}
-        {% if summary %}<form method="post" action="/threads/{{ thread.id }}/summarize" onsubmit="return confirm('Write a new AI draft from all messages?')"><button type="submit" {% if in_flight %}disabled{% endif %}>Rewrite AI draft{% if new_since %} ({{ new_since|length }} new){% endif %}</button></form>{% endif %}
         <form method="post" action="/threads/{{ thread.id }}/merge">
-          <label for="into" style="margin-top:0">Merge into another case (same school)</label>
-          <div class="row"><div style="flex:3"><select id="into" name="into">{% for t in other_cases %}<option value="{{ t.case_number }}">{{ t.case_number }} · {{ t.display_name or t.address }}</option>{% endfor %}</select></div>
-          <div style="flex:0 0 auto"><button type="submit" {% if not other_cases %}disabled{% endif %}>Merge</button></div></div>
+          <label for="into" style="margin:6px 0 4px">Merge into another case (same school)</label>
+          <div class="row" style="gap:6px"><div style="flex:3"><select id="into" name="into">{% for t in other_cases %}<option value="{{ t.case_number }}">{{ t.case_number }} {{ t.display_name or t.address }}</option>{% endfor %}</select></div>
+          <div style="flex:0 0 auto"><button type="submit" {% if not other_cases %}disabled{% endif %} style="width:auto">Merge</button></div></div>
         </form>
       </div>
     </details>
@@ -139,328 +181,375 @@
 {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
 {% if request.query_params.get('imported') %}<div class="flash ok">Imported {{ request.query_params.get('imported') }} messages{% if request.query_params.get('dupes', '0') != '0' %} ({{ request.query_params.get('dupes') }} already here){% endif %}.
   {% if request.query_params.get('missing', '0') != '0' %}{{ request.query_params.get('missing') }} attachments missing: export again with "Include media".{% endif %}</div>{% endif %}
-{% if in_flight %}<div class="flash warn">Processing {{ in_flight }} message(s)… this page refreshes by itself.</div>{% endif %}
+{% if in_flight %}<div class="flash warn">Reading {{ in_flight }} new message{{ "" if in_flight == 1 else "s" }}. This page updates by itself.</div>{% endif %}
 {% if thread.status == "not_relevant" and summary %}<div class="flash warn">Set aside: not about PS43's school work{% if d.relevance_reason %} ({{ d.relevance_reason }}){% endif %}.</div>{% endif %}
-{% if stage %}{{ ui.journey(stage) }}{% endif %}
 
-<div class="layout">
-<section>
-  {% if not summary %}
-  <div class="panel">
-    <h2 style="margin-top:0">No draft yet</h2>
-    <p class="muted">{% if in_flight %}It is written once the messages are processed.{% else %}The AI writes it shortly after the last message.{% endif %}</p>
+{# ---------------- progress rail ---------------- #}
+{% if not is_partner_case and thread.status not in ("closed", "rejected", "not_relevant") %}
+{% set pos = {"request": 0, "check": 1, "rank": 2, "match": 2, "deliver": 3, "confirm": 4}.get(stage, 0) %}
+{% if thread.status == "resolved" %}{% set pos = 5 %}{% endif %}
+<ol class="rail" aria-label="Where this case stands">
+  {% for label in ["Messages", "Review", "Find partners", "Delivery", "School confirms", "Resolved"] %}
+  <li class="{{ 'done' if loop.index0 < pos or (pos == 5) else ('now' if loop.index0 == pos else '') }}" {% if loop.index0 == pos %}aria-current="step"{% endif %}>{{ label }}</li>
+  {% endfor %}
+</ol>
+{% endif %}
+
+{# ---------------- tabs ---------------- #}
+{% set live_needs = case_needs|rejectattr("ticket.status", "equalto", "cancelled")|list %}
+<div class="ptabs" role="tablist">
+  <button role="tab" aria-selected="true" data-tab="summary">Summary</button>
+  {% if case_needs or (d and d.needs) %}<button role="tab" aria-selected="false" data-tab="needs">Needs<span class="n">{{ live_needs|length if case_needs else d.needs|length }}</span></button>{% endif %}
+  <button role="tab" aria-selected="false" data-tab="messages">Messages<span class="n">{{ items|length }}</span></button>
+  {% if history|length > 1 %}<button role="tab" aria-selected="false" data-tab="activity">Activity</button>{% endif %}
+</div>
+
+{# ================= SUMMARY ================= #}
+<section class="ppane" id="tab-summary">
+{% if not summary %}
+  <div class="panel" style="max-width:640px">
+    <h2 style="margin-top:0">No summary yet</h2>
+    <p class="muted">{% if in_flight %}The AI writes it once the messages are read.{% else %}The AI writes it shortly after the last message.{% endif %}</p>
     <form method="post" action="/threads/{{ thread.id }}/summarize"><button class="primary" type="submit" {% if in_flight %}disabled{% endif %}>Write it now</button></form>
   </div>
-  {% else %}
-
+{% else %}
   {% if summary.version > 1 and d.what_changed and d.what_changed != "New case" and summary.status == "draft" %}
   <div class="flash warn"><strong>Updated from new messages:</strong> {{ d.what_changed }}</div>
   {% endif %}
+  <div class="sum">
+    <div>
+      {% if d.safety_flags %}<div class="flags"><strong>Handle with care.</strong> {{ d.safety_flags|join(" ") }}</div>{% endif %}
+      <p class="lead">{{ d.situation.text }} {{ cites(d.situation.citations) }}</p>
 
-  {# ---- suggested matches: "by the way, these partners fit" ---- #}
-  {% if matches %}
-  <div class="panel matches" style="margin-bottom:16px">
-    <div class="eyebrow">{{ ui.icon("match", 14) }} Suggested matches</div>
-    <h2>{% if matches|selectattr("exact")|list %}Good news: these partners fit this school{% else %}No exact match yet{% endif %}</h2>
-    {% for r in matches[:5] %}{% set k = r.ticket %}
-    <div class="match-row">
-      <div>
-        <div class="need">{{ category_labels.get(k.category, k.category.replace("_", " "))|capitalize }}{% if k.quantity_text %} · {{ k.quantity_text }}{% endif %}
-          {% if k.urgency in ("critical", "high") %}<span class="badge b-{{ k.urgency }}">{{ k.urgency }}</span>{% endif %}</div>
-        {% if r.picks %}
-        <div class="who">{% for c in r.picks %}<a href="/partners/{{ c.donor_id }}"><strong>{{ c.donor_name }}</strong></a>{% if c.covers %} gives {{ (c.covers)|qty }}{% endif %}{% if c.trust and c.trust.level %} <span class="badge b-{{ c.trust.level }}">{{ c.trust.level }}</span>{% endif %}{% if c.abroad %} <span class="badge b-partial">abroad</span>{% endif %}{% if not loop.last %} <span class="arrow">+</span> {% endif %}{% endfor %}</div>
-        <div class="why2">{% if r.plan.type == "related" %}Related help only: worth a call{% elif r.plan.type == "partial" %}Covers part of it{% elif r.plan.type == "combined" %}Together they cover it{% else %}{{ r.picks[0].reasons[:2]|join(" · ") }}{% endif %}{% if r.others %} · <a href="/tickets/{{ k.id }}">{{ r.others }} other option{{ "" if r.others == 1 else "s" }}</a>{% endif %}</div>
-        {% else %}
-        <div class="who muted">No partner offers this yet.</div>
+      {% set number_labels = [("students", "pupils"), ("girls", "girls"), ("teachers", "teachers"), ("parent_paid_teachers", "teachers paid by parents"), ("classrooms", "classrooms"), ("without_birth_certificate", "without a birth certificate")] %}
+      {% if d.numbers and d.numbers.values()|select("number")|list %}
+      <div class="figures">{% for key, label in number_labels %}{% if d.numbers[key] is number %}<div><strong>{{ d.numbers[key] }}</strong><span>{{ label }}</span></div>{% endif %}{% endfor %}</div>
+      {% endif %}
+
+      {% if is_partner_case and d.donor %}
+        <h3>What they can give</h3>
+        <p style="margin:0 0 6px">{{ d.donor.provides_summary or "Not summarised yet." }} {{ cites(d.donor.citations) }}</p>
+        <p class="quiet">{% for g in d.donor.gives %}<span class="pill">{{ g }}</span>{% endfor %}{% if d.donor.amount %}<span class="pill">{{ d.donor.amount }}</span>{% endif %}{% if d.donor.regions %}<span class="pill">{{ d.donor.regions|join(", ") }}</span>{% endif %}{% if d.donor.timeframe %}<span class="pill">{{ d.donor.timeframe }}</span>{% endif %}</p>
+        {% if d.donor.conditions %}<p class="quiet">Conditions: {{ d.donor.conditions }}</p>{% endif %}
+        {% if d.offers %}<ul class="needs-mini" style="margin-top:10px">{% for o in d.offers %}<li><span><b>{{ category_labels.get(o.category, o.category.replace("_", " "))|capitalize }}</b>: {{ o.description }} {{ cites(o.citations) }}</span>{% if o.quantity %}<span class="q">{{ o.quantity }}</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
+      {% endif %}
+
+      {% if d.profile and not is_partner_case %}
+        {% set crit = [] %}{% set part = [] %}{% set fine = [] %}{% set unknown = [] %}
+        {% for k in profile_keys %}{% set st = (d.profile.get(k) or {}).get("status", "unknown") %}
+          {% if st == "critical" %}{% set _ = crit.append(k) %}{% elif st == "partial" %}{% set _ = part.append(k) %}{% elif st == "ok" %}{% set _ = fine.append(k) %}{% else %}{% set _ = unknown.append(k) %}{% endif %}{% endfor %}
+        <h3>School profile{% if d._follow_up and d._follow_up.complete is not none %} <span class="muted" style="font-weight:400">{{ d._follow_up.complete }}% known</span>{% endif %}</h3>
+        {% if crit or part %}
+        <div class="gaps">
+          {% for k in crit + part %}{% set p = d.profile.get(k) or {} %}
+          <span class="gap {{ p.status }}" title="{{ profile_areas[k] }}"><b>{{ area_labels.get(k, k.replace("_", " "))|capitalize }}</b>{% if p.note %}<small>{{ p.note }} {{ cites(p.citations) }}</small>{% endif %}</span>
+          {% endfor %}
+        </div>
         {% endif %}
-      </div>
-      <div>
-        {% if r.picks and r.plan.type != "related" %}
-        <form method="post" action="/tickets/{{ k.id }}/assign-plan"><input type="hidden" name="back" value="/threads/{{ thread.id }}"><button class="primary" type="submit">Use this match</button></form>
-        {% else %}<a class="btn" href="/tickets/{{ k.id }}">Look</a>{% endif %}
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-  {% elif next and summary.status == "approved" %}
-  {{ ui.next_step(next) }}
-  {% endif %}
+        {% if fine %}<p class="quiet">Fine: {% for k in fine %}{{ area_labels.get(k, k.replace("_", " ")) }}{% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+        {% if unknown %}<p class="quiet">Not known yet: {% for k in unknown %}{{ area_labels.get(k, k.replace("_", " ")) }}{% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+      {% endif %}
 
+      {% if d.readiness and not is_partner_case %}
+        <h3>Ready to receive help?</h3>
+        {{ ui.readiness_icons(d.readiness) }}
+      {% endif %}
+
+      {% set v = d.vulnerability %}
+      {% if v and (v.conflict_affected == "yes" or v.displaced_pupils or v.pupils_with_disability or v.orphans) %}
+      <p class="quiet" style="margin-top:14px"><strong style="color:var(--bad)">Children at risk:</strong>
+        {% if v.conflict_affected == "yes" %}conflict area. {% endif %}{% if v.displaced_pupils %}{{ v.displaced_pupils }} displaced. {% endif %}{% if v.pupils_with_disability %}{{ v.pupils_with_disability }} with a disability. {% endif %}{% if v.orphans %}{{ v.orphans }} orphans.{% endif %} {{ cites(v.citations) }}</p>
+      {% endif %}
+
+      <details style="margin-top:18px"><summary class="small">More details from the AI</summary>
+        <p class="small muted">{{ d.title }}{% if d._trust %}. Evidence: {{ d._trust.label }}{% endif %}. AI confidence: {{ d.confidence }}. Language: {{ d.language }}.{% if d._edited_by %} Edited by {{ d._edited_by|join(", ") }}.{% endif %}</p>
+        {% if d.readiness and not is_partner_case %}<h3>Readiness, with sources</h3>
+          <ul class="small">{% for k in readiness_keys %}{% set r = d.readiness.get(k) or {} %}{% if r.status and r.status != "unknown" %}<li>{{ k.replace("_", " ")|capitalize }}: {{ r.status }}{% if r.note %} ({{ r.note }}){% endif %} {{ cites(r.citations) }}</li>{% endif %}{% endfor %}</ul>{% endif %}
+        {% if d.assets %}<h3>They already have</h3><ul class="small">{% for a in d.assets %}<li>{{ a.description }} {{ cites(a.citations) }}</li>{% endfor %}</ul>{% endif %}
+        {% if d.plan %}<h3>Plan</h3><ul class="small">{% for p in d.plan %}<li>{{ p.action }} ({{ p.owner }}{% if p.due %}, {{ p.due }}{% endif %}) {{ cites(p.citations) }}</li>{% endfor %}</ul>{% endif %}
+        {% if d.people %}<h3>People</h3><ul class="small">{% for p in d.people %}<li>{{ p.name }}{% if p.role %}, {{ p.role }}{% endif %} {{ cites(p.citations) }}</li>{% endfor %}</ul>{% endif %}
+        {% if d.open_questions %}<h3>Open questions</h3><ul class="small">{% for q in d.open_questions %}<li>{{ q }}</li>{% endfor %}</ul>{% endif %}
+      </details>
+    </div>
+
+    <aside class="side">
+      {% if next and next.label and summary.status != "draft" %}
+      <div class="panel" style="border:2px solid var(--green)">
+        <h2>Next</h2>
+        <p style="margin:0 0 10px">{{ next.label }}</p>
+        {% if good_matches %}<button class="primary" type="button" data-open-pop="matches">See matches</button>
+        {% elif next.action %}<form method="post" action="{{ next.action }}"><input type="hidden" name="back" value="/threads/{{ thread.id }}"><button class="primary" type="submit">{{ next.button or "Do it" }}</button></form>
+        {% elif next.href %}<a class="btn primary" href="{{ next.href }}">{{ next.button or "Open" }}</a>{% endif %}
+      </div>
+      {% endif %}
+
+      {% if priority and thread.status != "resolved" %}
+      <div class="panel prio q-{{ priority.quadrant }}">
+        <span class="tag">{{ priority.quadrant_label }}</span>
+        <span class="small muted" style="margin-left:6px">need {{ priority.need }}, ready {{ priority.readiness }}{% if priority.provisional %}, from the draft{% endif %}</span>
+        <details style="margin-top:6px"><summary class="small">Why this priority</summary><p class="small" style="margin:4px 0 0"><strong>Why:</strong> {{ priority.why }}</p></details>
+      </div>
+      {% endif %}
+
+      {% if d.needs and not case_needs and not is_partner_case %}
+      <div class="panel">
+        <h2>What they need</h2>
+        <ul class="needs-mini">{% for n in d.needs %}<li><span><b>{{ category_labels.get(n.category, n.category.replace("_", " "))|capitalize }}</b>{% if n.urgency in ("critical", "high") %} <span class="badge b-{{ n.urgency }}">{{ n.urgency }}</span>{% endif %}<br><span class="small muted">{{ n.description }} {{ cites(n.citations) }}</span></span>{% if n.quantity %}<span class="q">{{ n.quantity }}</span>{% endif %}</li>{% endfor %}</ul>
+      </div>
+      {% endif %}
+
+      {% if partner %}<div class="panel"><h2>Partner record</h2><p class="small" style="margin:0"><a href="/partners/{{ partner.id }}">{{ partner.name }}</a>: offers, trust and schools they can help.</p></div>{% endif %}
+      {% if summary.status == "approved" %}<p class="small muted" style="margin:0 4px">Approved by {{ summary.reviewer }} {{ summary.reviewed_at|ago }}{% if summary.review_notes %}: “{{ summary.review_notes }}”{% endif %}.</p>
+      {% elif summary.status == "rejected" %}<div class="flash err" style="margin:0">Rejected by {{ summary.reviewer }}.{% if summary.review_notes %} {{ summary.review_notes }}{% endif %}</div>{% endif %}
+    </aside>
+  </div>
+{% endif %}
+</section>
+
+{# ================= NEEDS ================= #}
+{% if case_needs or (d and d.needs) %}
+<section class="ppane" id="tab-needs" hidden>
   {% if case_needs %}
   {% set n_done = case_needs|selectattr("ticket.status", "equalto", "checked")|list|length %}
-  {% set n_live = case_needs|rejectattr("ticket.status", "equalto", "cancelled")|list|length %}
-  <div class="panel" style="margin-bottom:16px" id="work">
-    <h2 style="margin-top:0; display:flex; justify-content:space-between; align-items:baseline">Needs
-      <span class="small muted">{{ n_done }} of {{ n_live }} confirmed by the school</span></h2>
-    <ul class="work">
-    {% for r in case_needs %}{% set k = r.ticket %}
-      <li>
-        <div>
-          <div class="t"><a href="/tickets/{{ k.id }}" style="color:inherit; text-decoration:none">{{ category_labels.get(k.category, k.category)|capitalize }}{% if k.quantity_text %} · {{ k.quantity_text }}{% endif %}</a>
-            <span class="st {{ k.status }}">{{ status_labels[k.status] }}</span></div>
-          <div class="s">{% if r.total %}<span class="prog"><i style="width:{{ (100 * r.done / r.total)|round|int }}%"></i></span>{{ r.done }}/{{ r.total }} steps{% endif %}
-            {% if r.partners %} · {{ r.partners|join(", ") }}{% endif %}
-            {% if r.next and r.next.label and k.status not in ("new",) %} · next: {{ r.next.label }}{% endif %}</div>
-        </div>
-        <div>
-          {% if r.next and r.next.action and k.status != "new" %}
-            <form method="post" action="{{ r.next.action }}"><input type="hidden" name="back" value="/threads/{{ thread.id }}">
-              {% for kk, vv in (r.next.fields or {}).items() %}<input type="hidden" name="{{ kk }}" value="{{ vv }}">{% endfor %}
-              <button class="primary" type="submit">{{ r.next.button or "Done" }}</button></form>
-          {% else %}<a class="btn" href="/tickets/{{ k.id }}{{ r.next.href if r.next and r.next.href and r.next.href.startswith('#') else '' }}">{{ "Open" if k.status not in ("new",) else "Find partner" }}</a>{% endif %}
-        </div>
-      </li>
-    {% endfor %}
-    </ul>
+  <div class="row" style="align-items:center; margin-bottom:6px">
+    <p class="muted" style="flex:3; margin:0">{{ n_done }} of {{ live_needs|length }} confirmed by the school.</p>
+    {% if good_matches %}<div style="flex:0 0 auto"><button type="button" data-open-pop="matches">See matches</button></div>{% endif %}
   </div>
-  {% endif %}
-
-  {% if priority and thread.status != "resolved" %}
-  <div class="panel priority q-{{ priority.quadrant }}" style="margin-bottom:16px">
-    <span class="badge" style="background:var(--q); color:var(--qt); font-size:13px">{{ priority.quadrant_label }}</span>
-    <span class="small muted">need {{ priority.need }} · ready {{ priority.readiness }}{% if priority.provisional %} · from the draft{% endif %}</span>
-    <p class="why"><strong>Why:</strong> {{ priority.why }}</p>
-    <a class="btn" href="/dashboard">All schools</a>
-  </div>
-  {% endif %}
-
-  <div class="panel">
-    <h2 style="margin-top:0; font-size:22px; line-height:1.25">{{ d.title }}</h2>
-    <p class="small muted" style="margin:-2px 0 8px">
-      {% if d._trust %}<span class="badge b-{{ d._trust.level }}">{{ d._trust.label }}</span>{% endif %}
-      {% if d.operating_status and d.operating_status.status not in ("unknown", "open") %}<span class="badge b-{{ d.operating_status.status }}">{{ d.operating_status.status.replace("_", " ") }}</span>{% endif %}
-      {% if d.operating_status and d.operating_status.safe_to_reach in ("risky", "no") %}<span class="badge b-high">{{ "unsafe to reach" if d.operating_status.safe_to_reach == "no" else "risky road" }}</span>{% endif %}
-      {% if summary.status == "draft" %}<span class="badge b-draft_ready">AI draft · not checked yet</span>{% endif %}
-      {% if d.confidence == "low" %}<span class="badge b-partial">AI not sure</span>{% endif %}
-    </p>
-
-    {% if d.safety_flags %}<div class="flags"><strong>Handle with care:</strong> {{ d.safety_flags|join(" · ") }}</div>{% endif %}
-
-    <p style="margin-top:4px">{{ d.situation.text }} {{ cites(d.situation.citations) }}</p>
-
-    {% set number_labels = [("students", "pupils"), ("girls", "girls"), ("teachers", "teachers"), ("parent_paid_teachers", "paid by parents"), ("classrooms", "classrooms"), ("without_birth_certificate", "no birth certificate")] %}
-    {% if d.numbers and d.numbers.values()|select("number")|list %}
-    <div class="kv">{% for key, label in number_labels %}{% if d.numbers[key] is number %}<div><strong>{{ d.numbers[key] }}</strong><span>{{ label }}</span></div>{% endif %}{% endfor %}</div>
-    {% endif %}
-
-    {% set v = d.vulnerability %}
-    {% if v and (v.conflict_affected == "yes" or v.displaced_pupils or v.pupils_with_disability or v.orphans) %}
-    <p class="small" style="margin:8px 0 0"><strong style="color:var(--bad)">Children at risk:</strong>
-      {% if v.conflict_affected == "yes" %}<span class="pill">conflict area</span>{% endif %}
-      {% if v.displaced_pupils %}<span class="pill">{{ v.displaced_pupils }} displaced</span>{% endif %}
-      {% if v.pupils_with_disability %}<span class="pill">{{ v.pupils_with_disability }} with a disability</span>{% endif %}
-      {% if v.orphans %}<span class="pill">{{ v.orphans }} orphans</span>{% endif %} {{ cites(v.citations) }}</p>
-    {% endif %}
-
-    {% if d.donor and (d.case_type == "offer" or d.organization.type == "donor") %}
-    <h3>What they can give</h3>
-    <p>{{ d.donor.provides_summary or "Not summarised yet." }} {{ cites(d.donor.citations) }}</p>
-    <p class="small">{% for g in d.donor.gives %}<span class="pill">{{ g }}</span>{% endfor %}
-      {% if d.donor.amount %}<span class="pill">{{ d.donor.amount }}</span>{% endif %}
-      {% if d.donor.regions %}<span class="pill">{{ d.donor.regions|join(", ") }}</span>{% endif %}
-      {% if d.donor.timeframe %}<span class="pill">{{ d.donor.timeframe }}</span>{% endif %}</p>
-    {% if d.donor.conditions %}<p class="small"><strong>Conditions:</strong> {{ d.donor.conditions }}</p>{% endif %}
-    {% endif %}
-
-    {% if d.needs and not case_needs %}
-    <h3>Needs</h3>
-    <ul class="needs-list">
-    {% for n in d.needs %}<li><span class="n-what"><strong>{{ category_labels.get(n.category, n.category.replace("_", " "))|capitalize }}</strong>: {{ n.description }} {{ cites(n.citations) }}</span>
-      {% if n.quantity %}<span class="n-qty">{{ n.quantity }}</span>{% endif %}
-      {% if n.urgency in ("critical", "high", "medium") %}<span class="badge b-{{ n.urgency }}">{{ n.urgency }}</span>{% endif %}</li>{% endfor %}
-    </ul>
-    {% endif %}
-
-    {% if d.offers %}
-    <h3>Offers</h3>
-    <ul class="needs-list">
-    {% for o in d.offers %}<li><span class="n-what"><strong>{{ category_labels.get(o.category, o.category.replace("_", " "))|capitalize }}</strong>: {{ o.description }} {{ cites(o.citations) }}
-      {% if o.conditions %}<br><span class="small muted">{{ o.conditions }}</span>{% endif %}</span>
-      {% if o.quantity %}<span class="n-qty">{{ o.quantity }}</span>{% endif %}{% if o.abroad %}<span class="badge b-partial">abroad</span>{% endif %}</li>{% endfor %}
-    </ul>
-    {% endif %}
-
-    {% if d.case_type != "offer" and d.readiness %}
-    <h3>Ready to receive help?</h3>
-    {{ ui.readiness_icons(d.readiness) }}
-    {% endif %}
-
-    {% if d.profile and d.case_type != "offer" %}
-    {% set known_areas = [] %}{% set unknown_areas = [] %}
-    {% for k in profile_keys %}{% if (d.profile.get(k) or {}).get("status", "unknown") == "unknown" %}{% set _ = unknown_areas.append(k) %}{% else %}{% set _ = known_areas.append(k) %}{% endif %}{% endfor %}
-    <h3>School profile{% if d._follow_up and d._follow_up.complete is not none %} · {{ d._follow_up.complete }}% known{% endif %}</h3>
-    {% if known_areas %}
-    <div class="profile">
-    {% for k in known_areas %}{% set p = d.profile.get(k) or {} %}
-      <div class="p-{{ p.status }}" title="{{ profile_areas[k] }}"><span class="area">{{ area_labels.get(k, k.replace("_", " "))|capitalize }}</span>
-        <span class="badge b-{{ p.status }}">{{ p.status }}</span>
-        {% if p.note %}<div class="small muted">{{ p.note }}</div>{% endif %}{{ cites(p.citations) }}</div>
-    {% endfor %}
+  {% set by_ticket = {} %}{% for m in matches %}{% set _ = by_ticket.update({m.ticket.id: m}) %}{% endfor %}
+  <div class="panel" id="work">
+  {% for r in case_needs %}{% set k = r.ticket %}{% set m = by_ticket.get(k.id) %}
+    <div class="need">
+      <div>
+        <div class="t"><a href="/tickets/{{ k.id }}" style="color:inherit; text-decoration:none">{{ category_labels.get(k.category, k.category)|capitalize }}{% if k.quantity_text %}, {{ k.quantity_text }}{% endif %}</a><span class="st {{ k.status }}">{{ status_labels[k.status] }}</span></div>
+        <div class="s">{% if r.total %}<span class="bar"><i style="width:{{ (100 * r.done / r.total)|round|int }}%"></i></span>{{ r.done }} of {{ r.total }} steps{% endif %}{% if r.partners %}, with {{ r.partners|join(" and ") }}{% endif %}</div>
+        {% if k.status == "new" and m %}
+          <div class="suggest">{% if m.picks and m.exact %}Fits: {% for c in m.picks %}<a href="/partners/{{ c.donor_id }}"><b>{{ c.donor_name }}</b></a>{% if c.covers %} ({{ (c.covers)|qty }}){% endif %}{% if not loop.last %} and {% endif %}{% endfor %}
+            {% elif m.picks %}<span class="muted">Related help only: {{ m.picks[0].donor_name }}. Worth a call.</span>
+            {% else %}<span class="muted">No partner offers this yet.</span>{% endif %}</div>
+        {% elif r.next and r.next.label and k.status not in ("checked", "cancelled") %}<div class="suggest muted">Next: {{ r.next.label }}</div>{% endif %}
+      </div>
+      <div>
+        {% if k.status == "new" and m and m.picks and m.exact %}
+          <form method="post" action="/tickets/{{ k.id }}/assign-plan"><input type="hidden" name="back" value="/threads/{{ thread.id }}"><button class="primary" type="submit">Use this match</button></form>
+        {% elif r.next and r.next.action and k.status != "new" %}
+          <form method="post" action="{{ r.next.action }}"><input type="hidden" name="back" value="/threads/{{ thread.id }}"><button class="primary" type="submit">{{ r.next.button or "Done" }}</button></form>
+        {% elif r.next and r.next.href and r.next.href.startswith('#') and k.status not in ("checked", "cancelled") %}<a class="btn primary" href="/tickets/{{ k.id }}{{ r.next.href }}">Message partner</a>
+        {% else %}<a class="btn" href="/tickets/{{ k.id }}">Open</a>{% endif %}
+      </div>
     </div>
-    {% endif %}
-    {% if unknown_areas %}<p class="small muted" style="margin:8px 0 0">Not known yet: {% for k in unknown_areas %}{{ area_labels.get(k, k.replace("_", " ")) }}{% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
-    {% endif %}
-
-    {% if d.assets or d.plan or d.people or d.open_questions or (d.readiness and d.case_type != "offer") %}
-    <details style="margin-top:12px"><summary class="small">More details</summary>
-    {% if d.readiness and d.case_type != "offer" %}
-    <h3>Readiness, with sources</h3>
-    <ul class="small">{% for k in readiness_keys %}{% set r = d.readiness.get(k) or {} %}{% if r.status and r.status != "unknown" %}<li>{{ k.replace("_", " ") }}: <strong>{{ r.status }}</strong>{% if r.note %} ({{ r.note }}){% endif %} {{ cites(r.citations) }}</li>{% endif %}{% endfor %}</ul>
-    {% endif %}
-    {% if d.assets %}<h3>They already have</h3><ul class="small">{% for a in d.assets %}<li>{{ a.description }} {{ cites(a.citations) }}</li>{% endfor %}</ul>{% endif %}
-    {% if d.plan %}<h3>Plan</h3><ul class="small">{% for p in d.plan %}<li>{{ p.action }} <span class="muted">({{ p.owner }}{% if p.due %}, {{ p.due }}{% endif %})</span> {{ cites(p.citations) }}</li>{% endfor %}</ul>{% endif %}
-    {% if d.people %}<h3>People</h3><ul class="small">{% for p in d.people %}<li>{{ p.name }}{% if p.role %}, {{ p.role }}{% endif %} {{ cites(p.citations) }}</li>{% endfor %}</ul>{% endif %}
-    {% if d.open_questions %}<h3>Open questions</h3><ul class="small">{% for q in d.open_questions %}<li>{{ q }}</li>{% endfor %}</ul>{% endif %}
-    <p class="small muted">AI confidence: {{ d.confidence }} · language: {{ d.language }}{% if d._edited_by %} · edited by {{ d._edited_by|join(", ") }}{% endif %}</p>
-    </details>
-    {% endif %}
+  {% endfor %}
   </div>
-
-  {# ---- decide ---- #}
-  {% if summary.status == "draft" %}
-  <div class="panel decide" style="margin-top:16px" id="decide">
-    <form method="post" action="/summaries/{{ summary.id }}/approve">
-    <div class="decide-top">
-      <div class="txt"><strong>Is this right?</strong><span class="small muted">Click an I-number to see the message behind a fact.</span></div>
-      <button class="primary big-btn" type="submit">Approve</button>
-      <button class="danger" type="submit" formaction="/summaries/{{ summary.id }}/reject" onclick="return confirm('Reject this draft?')">Reject</button>
-    </div>
-    <input name="notes" type="text" placeholder="Note (optional), e.g. confirmed by phone" style="margin-top:10px" aria-label="Review note">
-    </form>
-    <details style="margin-top:8px"><summary class="small">Fix something first</summary>
-      <form method="post" action="/summaries/{{ summary.id }}/edit">
-        <label for="t">Title</label><input id="t" name="title" type="text" value="{{ d.title }}">
-        <div class="row">
-          <div><label for="ct">Type</label><select id="ct" name="case_type">{% for c in ["need","offer","update","unclear"] %}<option {% if d.case_type == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
-          <div><label for="on">Organization</label><input id="on" name="org_name" type="text" value="{{ d.organization.name or '' }}"></div>
-          <div><label for="ot">Kind</label><select id="ot" name="org_type">{% for c in ["school","community","ngo","contractor","supplier","donor","government","other","unknown"] %}<option {% if d.organization.type == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
-        </div>
-        <div class="row">
-          <div><label for="rg">Region</label><input id="rg" name="region" type="text" value="{{ d.organization.region or '' }}"></div>
-          <div><label for="tw">Town</label><input id="tw" name="town" type="text" value="{{ d.organization.town or '' }}"></div>
-        </div>
-        <label for="si">Situation</label><textarea id="si" name="situation">{{ d.situation.text }}</textarea>
-        <label for="oq">Open questions (one per line)</label><textarea id="oq" name="open_questions">{{ d.open_questions|join("\n") }}</textarea>
-        <label for="cm">Confirmation message</label><textarea id="cm" name="confirmation_text">{{ d.confirmation_message.text }}</textarea>
-        <p><button type="submit">Save</button></p>
-      </form>
-      <details><summary class="small">Edit everything as JSON</summary>
-        <form method="post" action="/summaries/{{ summary.id }}/edit-json"><textarea class="code" name="data">{{ summary_json }}</textarea><p><button type="submit">Save JSON</button></p></form>
-      </details>
-    </details>
-  </div>
-  {% elif summary.status == "rejected" %}
-  <div class="flash err" style="margin-top:16px">Rejected by {{ summary.reviewer }}.{% if summary.review_notes %} {{ summary.review_notes }}{% endif %}</div>
   {% else %}
-  {% if partner %}<p class="small" style="margin:10px 2px 0">Partner record: <a href="/partners/{{ partner.id }}">{{ partner.name }}</a> · approved by {{ summary.reviewer }} {{ summary.reviewed_at|ago }}</p>{% endif %}
+  <div class="panel">
+    <p class="muted" style="margin-top:0">Approve the case to start finding partners for these needs.</p>
+    <ul class="needs-mini">{% for n in d.needs %}<li><span><b>{{ category_labels.get(n.category, n.category.replace("_", " "))|capitalize }}</b>: {{ n.description }} {{ cites(n.citations) }}</span>{% if n.quantity %}<span class="q">{{ n.quantity }}</span>{% endif %}{% if n.urgency in ("critical", "high") %}<span class="badge b-{{ n.urgency }}">{{ n.urgency }}</span>{% endif %}</li>{% endfor %}</ul>
+  </div>
   {% endif %}
+</section>
+{% endif %}
 
-  {# ---- one place to message the contact: ask what's missing, or confirm the summary ---- #}
-  {% if summary.status != "rejected" %}
+{# ================= MESSAGES ================= #}
+<section class="ppane" id="tab-messages" hidden>
+<div class="msgs">
+  <div>
+  {% for it in items %}
+    <div class="item {{ it.direction }}" id="item-{{ it.id }}">
+      <div class="meta">
+        <span class="id">I{{ it.id }}</span>
+        <span>{{ "PS43" if it.direction == "out" else (it.author or first_name) }}</span>
+        <span>{{ {"whatsapp":"WhatsApp","sms":"SMS","call":"Call","kobo":"Field form","upload":"Upload","agent":"Staff notes","web":"Sign-up form"}.get(it.channel, it.channel) }}{% if it.kind in ("audio", "image", "video", "document") %} {{ {"audio":"voice","image":"photo"}.get(it.kind, it.kind) }}{% endif %}</span>
+        <span>{{ it.sent_at|ago }}</span>
+        {% if it.status not in ("processed",) %}<span class="badge b-{{ it.status }}">{{ it.status.replace("_", " ") }}</span>{% endif %}
+        {% if it.id in new_since %}<span class="badge b-held">new</span>{% endif %}
+      </div>
+      {% if it.media_path %}
+        {% if it.kind == "image" %}<a href="/media/{{ it.id }}" target="_blank"><img src="/media/{{ it.id }}" alt="Photo from {{ first_name }}" loading="lazy"></a>
+        {% elif it.kind == "audio" %}<audio controls preload="none" src="/media/{{ it.id }}"></audio>
+        {% elif it.kind == "video" %}<video controls preload="none" src="/media/{{ it.id }}"></video>
+        {% else %}<a href="/media/{{ it.id }}" target="_blank">Open file</a>{% endif %}
+      {% endif %}
+      {% if it.body %}<div class="body">{{ it.body }}</div>{% endif %}
+      {% if it.extracted_text and it.kind not in ("text", "form") %}
+        {% if it.kind == "audio" %}<div class="extracted">{{ it.extracted_text }}</div>
+        {% else %}<details class="extracted"><summary class="small">{{ {"image":"What the AI sees","video":"Video transcript","document":"Document summary"}.get(it.kind, "Extracted text") }}</summary>{{ it.extracted_text }}</details>{% endif %}
+      {% endif %}
+      {% if it.status == "failed" %}
+        <div class="small" style="color:var(--bad); margin-top:6px">{{ it.error }}</div>
+        <form method="post" action="/threads/{{ thread.id }}/items/{{ it.id }}/retry"><button class="small" type="submit">Retry</button></form>
+      {% endif %}
+      {% if other_cases %}
+      <details class="tools"><summary>Move to another case</summary>
+        <form method="post" action="/items/{{ it.id }}/move" class="row" style="margin-top:4px; gap:6px">
+          <div style="flex:3"><select name="into" aria-label="Move to case">{% for t in other_cases %}<option value="{{ t.case_number }}">{{ t.case_number }} {{ t.display_name or t.address }}</option>{% endfor %}</select></div>
+          <div style="flex:0 0 auto"><button type="submit">Move</button></div>
+        </form>
+      </details>
+      {% endif %}
+    </div>
+  {% else %}<p class="muted">No messages yet.</p>{% endfor %}
+  </div>
+
+  {# composer: ask what's missing, or confirm the summary; sent from the staff phone, logged here #}
+  <div>
+  {% if summary and summary.status != "rejected" %}
   {% set ask = d._follow_up.message if d._follow_up else "" %}
   {% set confirm_text = d.confirmation_message.text if d.confirmation_message else "" %}
   {% if ask or confirm_text %}
-  <details class="panel" style="margin-top:16px; padding-top:10px" id="message" {% if thread.status != "resolved" %}open{% endif %}>
-    <summary style="margin:0"><h2 style="margin:0; display:inline">{{ ui.icon("message") }} Message {{ first_name }}</h2></summary>
-    <div class="msg-tabs" role="tablist">
-      {% if ask %}<button type="button" class="on" data-pane="ask">Ask for missing information</button>{% endif %}
-      {% if confirm_text %}<button type="button" class="{{ '' if ask else 'on' }}" data-pane="confirm">Confirm the summary{% if summary.confirmation_sent_at %} ✓{% endif %}</button>{% endif %}
+  <div class="panel compose" id="message" style="position:sticky; top:84px">
+    <h2 style="margin-top:0">Message {{ first_name }}</h2>
+    <div class="seg" role="group" aria-label="Which message">
+      {% if ask %}<button type="button" aria-pressed="true" data-pane="ask">Ask for missing information</button>{% endif %}
+      {% if confirm_text %}<button type="button" aria-pressed="{{ 'false' if ask else 'true' }}" data-pane="confirm">Confirm the summary{% if summary.confirmation_sent_at %} ✓{% endif %}</button>{% endif %}
     </div>
-    {% for key, text, action, hint in [("ask", ask, "send-follow-up", "Only what's still unknown (" ~ (d._follow_up.missing_topics[:4]|join(", ")|replace("_", " ") if d._follow_up else "") ~ "), max 3 questions. Their answers come back into this case."),
-                                       ("confirm", confirm_text, "send-confirmation", "Send the summary back so they can correct it." ~ (" Last sent " ~ (summary.confirmation_sent_at|ago) ~ "." if summary.confirmation_sent_at else ""))] %}
+    {% for key, text, action, hint in [("ask", ask, "send-follow-up", "Only what is still unknown, at most 3 questions."),
+                                       ("confirm", confirm_text, "send-confirmation", "So they can correct anything we got wrong." ~ (" Last sent " ~ (summary.confirmation_sent_at|ago) ~ "." if summary.confirmation_sent_at else ""))] %}
     {% if text %}
-    <form class="msg-pane {{ 'on' if (key == 'ask' or not ask) else '' }}" id="pane-{{ key }}" method="post" action="/summaries/{{ summary.id }}/{{ action }}">
+    <form class="msg-pane" id="pane-{{ key }}" method="post" action="/summaries/{{ summary.id }}/{{ action }}" {% if not (key == 'ask' or not ask) %}hidden{% endif %}>
       <p class="hint">{{ hint }}</p>
-      <textarea name="text" maxlength="1500" rows="6">{{ text }}</textarea>
-      <div class="send-row">
+      <textarea name="text" maxlength="1500" rows="7" aria-label="Message text">{{ text }}</textarea>
+      <div class="row2">
         {% if phone %}
           <a class="btn primary" data-open="wa" href="https://wa.me/{{ phone|replace('+', '') }}" target="_blank" rel="noopener">Open in WhatsApp</a>
           <a class="btn" data-open="sms" href="sms:{{ phone }}">Open in SMS</a>
         {% endif %}
         <button type="button" data-copy>Copy</button>
-        <span class="sep"></span>
-        <button type="submit" name="manual" value="1" title="Log it in this case after sending it from your own phone">I sent it ✓</button>
+        <span class="grow"></span>
+        <button type="submit" name="manual" value="1" title="Log it in this case once you have sent it">I sent it ✓</button>
       </div>
-      {% if not phone %}<p class="hint" style="margin-top:8px">No phone number on this contact: copy the text and send it however you reach them.</p>{% endif %}
+      {% if not phone %}<p class="hint" style="margin-top:8px">No phone number on this contact. Copy the text and send it however you reach them.</p>{% endif %}
     </form>
     {% endif %}
     {% endfor %}
-  </details>
-  {% endif %}
-  {% endif %}
-  {% endif %}
-
-  {% if history|length > 1 %}
-  <details class="more-box" {% if thread.status in ("approved", "resolved") %}open{% endif %}>
-    <summary>History</summary>
-    <ul class="history">
-    {% for e in history %}{% if loop.index == 9 %}</ul><details><summary class="small">Show {{ history|length - 8 }} older</summary><ul class="history">{% endif %}<li><span class="when" title="{{ e.at }}">{{ e.at|ago }}</span>
-      <span class="k-{{ e.kind }}">{% if e.ticket %}<a href="/tickets/{{ e.ticket }}" style="color:inherit; text-decoration:none">{{ e.text|truncate(110) }}</a>{% else %}{{ e.text }}{% endif %}{% if e.who and e.who not in ("AI",) %} <span class="muted">· {{ e.who }}</span>{% endif %}</span></li>{% endfor %}
-    </ul>{% if history|length > 8 %}</details>{% endif %}
-  </details>
-  {% endif %}
-</section>
-
-<section class="sources">
-  <h2 style="margin-top:0">Messages <span class="small muted">{{ items|length }}{% if channels %} · {{ channels|join(", ") }}{% endif %}</span></h2>
-  {% for it in items %}
-  <div class="item {{ it.direction }}" id="item-{{ it.id }}">
-    <div class="meta">
-      <span class="id">I{{ it.id }}</span>
-      <span>{{ "PS43" if it.direction == "out" else (it.author or first_name) }}</span>
-      <span>· {{ {"whatsapp":"WhatsApp","sms":"SMS","call":"Call","kobo":"Form","upload":"Upload","agent":"Notes"}.get(it.channel, it.channel) }}{% if it.kind not in ("text",) %} {{ {"audio":"voice","image":"photo"}.get(it.kind, it.kind) }}{% endif %}</span>
-      <span>· {{ it.sent_at|ago }}</span>
-      {% if it.status not in ("processed",) %}<span class="badge b-{{ it.status }}">{{ it.status.replace("_", " ") }}</span>{% endif %}
-      {% if it.id in new_since %}<span class="badge b-held">new</span>{% endif %}
-    </div>
-    {% if it.media_path %}
-      {% if it.kind == "image" %}<a href="/media/{{ it.id }}" target="_blank"><img src="/media/{{ it.id }}" alt="Photo from {{ first_name }}" loading="lazy"></a>
-      {% elif it.kind == "audio" %}<audio controls preload="none" src="/media/{{ it.id }}"></audio>
-      {% elif it.kind == "video" %}<video controls preload="none" src="/media/{{ it.id }}"></video>
-      {% else %}<a href="/media/{{ it.id }}" target="_blank">Open file</a>{% endif %}
-    {% endif %}
-    {% if it.body %}<div class="body">{{ it.body }}</div>{% endif %}
-    {% if it.extracted_text and it.kind not in ("text", "form") %}
-      {% if it.kind == "audio" %}<div class="extracted">{{ it.extracted_text }}</div>
-      {% else %}<details class="extracted"><summary>{{ {"image":"What the AI sees","video":"Video transcript","document":"Document summary"}.get(it.kind, "Extracted text") }}</summary>{{ it.extracted_text }}</details>{% endif %}
-    {% endif %}
-    {% if it.status == "failed" %}
-      <div class="small" style="color:var(--bad); margin-top:6px">{{ it.error }}</div>
-      <form method="post" action="/threads/{{ thread.id }}/items/{{ it.id }}/retry"><button class="small" type="submit">Retry</button></form>
-    {% endif %}
-    {% if other_cases %}
-    <details class="tools"><summary>Move…</summary>
-      <form method="post" action="/items/{{ it.id }}/move" class="row" style="margin-top:4px">
-        <div style="flex:3"><select name="into" aria-label="Move to case">{% for t in other_cases %}<option value="{{ t.case_number }}">{{ t.case_number }} · {{ t.display_name or t.address }}</option>{% endfor %}</select></div>
-        <div style="flex:0 0 auto"><button type="submit">Move</button></div>
-      </form>
-    </details>
-    {% endif %}
   </div>
-  {% endfor %}
-  {% if not items %}<p class="muted">No messages yet.</p>{% endif %}
+  {% endif %}
+  {% endif %}
+  </div>
+</div>
 </section>
+
+{# ================= ACTIVITY ================= #}
+{% if history|length > 1 %}
+<section class="ppane" id="tab-activity" hidden>
+  <ul class="history">
+  {% for e in history %}<li><span class="when" title="{{ e.at }}">{{ e.at|ago }}</span>
+    <span class="k-{{ e.kind }}">{% if e.ticket %}<a href="/tickets/{{ e.ticket }}" style="color:inherit; text-decoration:none">{{ e.text|truncate(130) }}</a>{% else %}{{ e.text }}{% endif %}{% if e.who and e.who not in ("AI",) %} <span class="muted">({{ e.who }})</span>{% endif %}</span></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{# ================= REVIEW BAR (drafts) ================= #}
+{% if summary and summary.status == "draft" %}
+<div class="review-bar" id="review">
+  <form method="post" action="/summaries/{{ summary.id }}/approve">
+    <div class="ask"><strong>Is this summary right?</strong><span class="small muted">Tap an I-number to see the message behind a fact.</span></div>
+    <input name="notes" type="text" placeholder="Note (optional)" aria-label="Review note">
+    <button type="button" data-open-pop="edit">Fix something</button>
+    <button class="danger" type="submit" formaction="/summaries/{{ summary.id }}/reject" onclick="return confirm('Reject this draft?')">Reject</button>
+    <button class="primary big-btn" type="submit">Approve</button>
+  </form>
 </div>
 
+<dialog class="pop" id="pop-edit" aria-labelledby="edit-h">
+  <div class="pop-head"><h2 id="edit-h">Fix the summary</h2></div>
+  <form method="post" action="/summaries/{{ summary.id }}/edit">
+    <div class="pop-body">
+      <label for="t">Title</label><input id="t" name="title" type="text" value="{{ d.title }}">
+      <div class="row">
+        <div><label for="on">Organisation</label><input id="on" name="org_name" type="text" value="{{ org.name or '' }}"></div>
+        <div><label for="ot">Kind</label><select id="ot" name="org_type">{% for c in ["school","community","ngo","contractor","supplier","donor","government","other","unknown"] %}<option {% if org.type == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
+        <div><label for="ct">Case</label><select id="ct" name="case_type">{% for c in ["need","offer","update","unclear"] %}<option {% if d.case_type == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
+      </div>
+      <div class="row">
+        <div><label for="tw">Town</label><input id="tw" name="town" type="text" value="{{ org.town or '' }}"></div>
+        <div><label for="rg">Region</label><input id="rg" name="region" type="text" value="{{ org.region or '' }}"></div>
+      </div>
+      <label for="si">What is happening</label><textarea id="si" name="situation">{{ d.situation.text }}</textarea>
+      <label for="oq">Open questions (one per line)</label><textarea id="oq" name="open_questions">{{ d.open_questions|join("\n") }}</textarea>
+      <label for="cm">Confirmation message</label><textarea id="cm" name="confirmation_text">{{ d.confirmation_message.text }}</textarea>
+    </div>
+    <div class="pop-foot"><button type="button" data-close-pop>Cancel</button><button class="primary" type="submit">Save</button></div>
+  </form>
+  <details style="padding:0 22px 16px"><summary class="small">Edit everything as JSON</summary>
+    <form method="post" action="/summaries/{{ summary.id }}/edit-json"><textarea class="code" name="data">{{ summary_json }}</textarea><p><button type="submit">Save JSON</button></p></form>
+  </details>
+</dialog>
+{% endif %}
+
+{# ================= MATCHES POPUP ================= #}
+{% if matches %}
+<dialog class="pop" id="pop-matches" aria-labelledby="matches-h">
+  <div class="pop-head">
+    <h2 id="matches-h">{% if request.query_params.get('approved') %}Approved. These partners can help{% elif good_matches %}Partners that fit {{ org.name or "this school" }}{% else %}No ready match yet{% endif %}</h2>
+    <p class="small muted" style="margin:4px 0 0">Using a match assigns the partner to the need. You then message them from the need.</p>
+  </div>
+  <div class="pop-body">
+  {% for r in matches %}{% set k = r.ticket %}
+    <div class="mrow">
+      <div>
+        <div class="need-name">{{ category_labels.get(k.category, k.category)|capitalize }}{% if k.quantity_text %}, {{ k.quantity_text }}{% endif %}</div>
+        {% if r.picks %}
+        <div class="who">{% for c in r.picks %}<a href="/partners/{{ c.donor_id }}"><b>{{ c.donor_name }}</b></a>{% if c.covers %} gives {{ (c.covers)|qty }}{% endif %}{% if c.abroad %} (abroad){% endif %}{% if not loop.last %} and {% endif %}{% endfor %}</div>
+        <div class="why">{% if r.plan.type == "related" %}Related help only: worth a call{% elif r.plan.type == "partial" %}Covers part of it{% elif r.plan.type == "combined" %}Together they cover it{% else %}{{ r.picks[0].reasons[:2]|join(", ")|capitalize }}{% endif %}</div>
+        {% else %}<div class="why">No partner offers this yet.</div>{% endif %}
+      </div>
+      <div>
+        {% if r.picks and r.exact %}
+          <form method="post" action="/tickets/{{ k.id }}/assign-plan"><input type="hidden" name="back" value="/threads/{{ thread.id }}?matches=1"><button class="primary" type="submit" {% if r is sameas good_matches[0] %}autofocus{% endif %}>Use this match</button></form>
+        {% else %}<a class="btn" href="/tickets/{{ k.id }}">Look</a>{% endif %}
+      </div>
+    </div>
+  {% endfor %}
+  </div>
+  <div class="pop-foot"><a class="btn" href="/partners">All partners</a><button class="primary" type="button" data-close-pop>Done</button></div>
+</dialog>
+{% endif %}
+
 <script>
-// message panel: switch between "ask" and "confirm", and keep WhatsApp/SMS links in sync with the edited text
-document.querySelectorAll(".msg-tabs button").forEach(b => b.addEventListener("click", () => {
-  document.querySelectorAll(".msg-tabs button").forEach(x => x.classList.toggle("on", x === b));
-  document.querySelectorAll(".msg-pane").forEach(p => p.classList.toggle("on", p.id === "pane-" + b.dataset.pane));
-}));
-document.querySelectorAll(".msg-pane").forEach(form => {
-  const box = form.querySelector("textarea");
-  const sync = () => {
-    const t = encodeURIComponent(box.value);
-    const wa = form.querySelector("[data-open=wa]"); if (wa) wa.href = wa.href.split("?")[0] + "?text=" + t;
-    const sms = form.querySelector("[data-open=sms]"); if (sms) sms.href = sms.href.split("?")[0] + "?&body=" + t;
-  };
-  box.addEventListener("input", sync); sync();
-  const copy = form.querySelector("[data-copy]");
-  if (copy) copy.addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText(box.value); } catch (e) { box.select(); document.execCommand("copy"); }
-    copy.textContent = "Copied ✓"; setTimeout(() => copy.textContent = "Copy", 1500);
+(function () {
+  // tabs (remembered in the address, so links and reloads keep your place)
+  const tabs = [...document.querySelectorAll(".ptabs [data-tab]")];
+  function show(name) {
+    if (!document.getElementById("tab-" + name)) name = "summary";
+    tabs.forEach(t => t.setAttribute("aria-selected", t.dataset.tab === name ? "true" : "false"));
+    document.querySelectorAll(".ppane").forEach(p => p.hidden = p.id !== "tab-" + name);
+    history.replaceState(null, "", "#" + name);
+  }
+  tabs.forEach(t => t.addEventListener("click", () => show(t.dataset.tab)));
+  const h = location.hash.replace("#", "");
+  if (h.startsWith("item-")) { show("messages"); const el = document.getElementById(h); if (el) { el.classList.add("hl"); el.scrollIntoView(); } }
+  else if (h && h !== "review") show(h);
+  // citations jump to the message behind the fact
+  document.querySelectorAll("a.cite").forEach(a => a.addEventListener("click", e => {
+    e.preventDefault(); show("messages");
+    const el = document.querySelector(a.getAttribute("href"));
+    document.querySelectorAll(".item.hl").forEach(x => x.classList.remove("hl"));
+    if (el) { el.classList.add("hl"); el.scrollIntoView({block: "center"}); }
+  }));
+  // popups
+  document.querySelectorAll("[data-open-pop]").forEach(b => b.addEventListener("click", () => document.getElementById("pop-" + b.dataset.openPop).showModal()));
+  document.querySelectorAll("[data-close-pop]").forEach(b => b.addEventListener("click", () => b.closest("dialog").close()));
+  document.querySelectorAll("dialog.pop").forEach(d => d.addEventListener("click", e => { if (e.target === d) d.close(); }));
+  {% if show_pop %}const pm = document.getElementById("pop-matches"); if (pm) pm.showModal();
+  history.replaceState(null, "", location.pathname + (location.hash || ""));{% endif %}
+  // message composer
+  document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+    document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    document.querySelectorAll(".msg-pane").forEach(p => p.hidden = p.id !== "pane-" + b.dataset.pane);
+  }));
+  document.querySelectorAll(".msg-pane").forEach(form => {
+    const box = form.querySelector("textarea");
+    const sync = () => {
+      const t = encodeURIComponent(box.value);
+      const wa = form.querySelector("[data-open=wa]"); if (wa) wa.href = wa.href.split("?")[0] + "?text=" + t;
+      const sms = form.querySelector("[data-open=sms]"); if (sms) sms.href = sms.href.split("?")[0] + "?&body=" + t;
+    };
+    box.addEventListener("input", sync); sync();
+    const copy = form.querySelector("[data-copy]");
+    if (copy) copy.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(box.value); } catch (e) { box.select(); document.execCommand("copy"); }
+      copy.textContent = "Copied"; setTimeout(() => copy.textContent = "Copy", 1500);
+    });
   });
-});
+})();
 </script>
 {% endblock %}

@@ -40,7 +40,8 @@ def _render(request: Request, name: str, **kw):
 def _go(url: str, msg: str | None = None, error: str | None = None) -> RedirectResponse:
     from urllib.parse import urlencode
     q = {k: v for k, v in {"msg": msg, "error": error}.items() if v}
-    return RedirectResponse(url + (("?" + urlencode(q)) if q else ""), status_code=303)
+    sep = "&" if "?" in url else "?"
+    return RedirectResponse(url + ((sep + urlencode(q)) if q else ""), status_code=303)
 
 
 def _num(text: str) -> float | None:
@@ -315,11 +316,13 @@ async def followup_send(followup_id: int, text: str = Form(...), manual: str = F
 
 @router.get("/partners", response_class=HTMLResponse)
 def partners_page(request: Request, role: str = "", msg: str | None = None):
-    partners = workflow.partners_view()
-    if role:
-        partners = [p for p in partners if role in p["roles"]]
-    return _render(request, "partners.html", partners=partners, role=role, kinds=DONOR_KINDS,
-                   categories=NEED_CATEGORIES, msg=msg)
+    everyone = workflow.partners_view()
+    for p in everyone:
+        p["can_help"] = len(workflow.partner_can_help(p["id"]))
+    role_counts = {r: sum(1 for p in everyone if r in p["roles"]) for r in ROLE_LABELS}
+    partners = [p for p in everyone if role in p["roles"]] if role else everyone
+    return _render(request, "partners.html", partners=partners, total=len(everyone), role_counts=role_counts, role=role,
+                   kinds=DONOR_KINDS, categories=NEED_CATEGORIES, msg=msg)
 
 
 @router.post("/partners")
@@ -346,13 +349,14 @@ def _partner_or_404(donor_id: int) -> dict:
 
 
 @router.get("/partners/{donor_id}", response_class=HTMLResponse)
-def partner_page(request: Request, donor_id: int, msg: str | None = None):
+def partner_page(request: Request, donor_id: int, msg: str | None = None, error: str | None = None):
     _partner_or_404(donor_id)
     p = next(x for x in workflow.partners_view() if x["id"] == donor_id)
     contact = db.get_contact(p["contact_id"]) if p.get("contact_id") else None
     thread = db.get_thread(p["thread_id"]) if p.get("thread_id") else None
-    return _render(request, "partner.html", p=p, contact=contact, thread=thread,
-                   can_help=workflow.partner_can_help(donor_id), categories=NEED_CATEGORIES, msg=msg)
+    phone = db.phone_of((contact or {}).get("reply_to") or (contact or {}).get("address"))
+    return _render(request, "partner.html", p=p, contact=contact, thread=thread, phone=phone,
+                   can_help=workflow.partner_can_help(donor_id), categories=NEED_CATEGORIES, msg=msg, error=error)
 
 
 @router.post("/partners/{donor_id}/verify")

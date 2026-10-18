@@ -1,105 +1,156 @@
 {% extends "base.html" %}
 {% block title %}{{ p.name }}{% endblock %}
+{% block head %}
+<style>
+.case-top { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin: 4px 0 6px; }
+.case-top .who { flex: 1 1 420px; min-width: 0; }
+.case-top h1 { margin: 0 0 6px; font-size: 34px; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: 15px; align-items: center; }
+.trust { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--ink); }
+.trust i { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.trust.t-Trusted i { background: var(--green); } .trust.t-Verified i { background: var(--yellow); }
+.lead { font-size: 18px; line-height: 1.5; margin: 10px 0 0; max-width: 72ch; }
+.rows { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 0 18px; }
+.r { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px 0; border-top: 1px solid var(--line); }
+.r:first-child { border-top: 0; }
+.r .t { font-weight: 700; font-size: 16px; }
+.r .s { color: var(--muted); font-size: 14px; margin-top: 2px; }
+.r.gone { opacity: .55; }
+.meter { margin: 8px 0; max-width: 360px; }
+</style>
+{% endblock %}
 {% block body %}
-<p class="small"><a href="/partners">← Partners</a></p>
-{% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
-<div class="grid2">
-<div>
-  <div class="panel">
-    <div>{% for r in p.roles %}<span class="pill">{{ role_labels.get(r, r) }}</span>{% endfor %}
-      <span class="pill">{{ p.kind.replace("_", " ") }}</span>{% if p.registered == "yes" %}<span class="pill">registered</span>{% endif %}</div>
-    <h1 style="margin:8px 0 4px">{{ p.name }}</h1>
-    <p class="muted small" style="margin:0">{{ p.regions|join(", ") or "Regions not stated" }}
-      {% if contact %} · {{ contact.reply_to or contact.address }}{% endif %}
-      {% if thread %} · <a href="/threads/{{ thread.id }}">conversation {{ thread.case_number }}</a>{% endif %}</p>
-    {% if p.summary %}<p>{{ p.summary }}</p>{% endif %}
-    <div class="kpis" style="margin:8px 0">
-      {% if p.amount %}<div><strong style="font-size:18px">{{ p.amount }}</strong><span>money offered</span></div>{% endif %}
-      {% if p.timeframe %}<div><strong style="font-size:18px">{{ p.timeframe }}</strong><span>available</span></div>{% endif %}
+<p class="small" style="margin:0"><a href="/partners">← Partners</a></p>
+{% if msg %}<div class="flash ok" style="margin-top:10px">{{ msg }}</div>{% endif %}
+{% if error %}<div class="flash err" style="margin-top:10px">{{ error }}</div>{% endif %}
+
+<div class="case-top">
+  <div class="who">
+    <h1>{{ p.name }}</h1>
+    <div class="facts">
+      <span class="trust t-{{ p.trust.level }}" title="Trust {{ p.trust.score }}/100"><i></i>{{ p.trust.level }}</span>
+      <span>{% for r in p.roles %}{{ role_labels.get(r, r) }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+      <span>{{ p.regions|join(", ") or "Anywhere" }}</span>
+      {% if phone %}<span>{{ phone }}</span>{% endif %}
+      {% if thread %}<a href="/threads/{{ thread.id }}">Their conversation</a>{% endif %}
     </div>
-    {% if p.conditions %}<p class="small"><strong>Their conditions:</strong> {{ p.conditions }}</p>{% endif %}
-    {% if p.past_work_note %}<p class="small"><strong>Says they worked with PS43 before:</strong> {{ p.past_work_note }} <span class="muted">(not counted in trust until confirmed)</span></p>{% endif %}
+    {% if p.summary %}<p class="lead">{{ p.summary }}</p>{% endif %}
   </div>
-
-  <div class="panel" style="margin-top:16px">
-    <h2 style="margin-top:0">Trust: <span class="badge b-{{ p.trust.level }}">{{ p.trust.level }}</span> {{ p.trust.score }}/100</h2>
-    <div class="meter" style="margin-bottom:8px"><i style="width:{{ p.trust.score }}%"></i></div>
-    <ul class="small">{% for r in p.trust.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
-    <form method="post" action="/partners/{{ p.id }}/verify" class="inline">
-      {% if p.verified %}<input type="hidden" name="verified" value="0"><span class="small">Identity checked by {{ p.verified_by }}.</span> <button type="submit">Undo</button>
-      {% else %}<input type="hidden" name="verified" value="1"><button class="primary" type="submit">I checked who they are</button>
-      <span class="small muted">registration papers, references or a visit</span>{% endif %}
-    </form>
-    {% if p.notes %}<p class="small" style="margin:10px 0 0"><strong>Notes:</strong> {{ p.notes }}</p>{% endif %}
-    <details style="margin-top:8px"><summary class="small">Edit roles and notes</summary>
-    <form method="post" action="/partners/{{ p.id }}/notes">
-      <label>Roles</label>
-      <div class="row">{% for r, label in role_labels.items() %}<label class="check" style="flex:0 0 auto"><input type="checkbox" name="roles" value="{{ r }}" {% if r in p.roles %}checked{% endif %}> {{ label }}</label>{% endfor %}</div>
-      <label>Staff notes</label><textarea name="notes" rows="3">{{ p.notes or "" }}</textarea>
-      <p><button type="submit">Save</button></p>
-    </form></details>
-  </div>
-
-  <div class="panel" style="margin-top:16px; overflow-x:auto">
-    <h2 style="margin-top:0">Cases with PS43 ({{ p.history|length }})</h2>
-    {% if p.history %}
-    <table><thead><tr><th>School case</th><th>What</th><th>Status</th></tr></thead><tbody>
-    {% for l in p.history %}<tr><td><a href="/tickets/{{ l.ticket_id }}">{{ l.case_title or l.case_number }}</a><br><span class="small muted">{{ l.case_number }} · {{ l.created_at[:10] }}</span></td>
-      <td class="small">{% if l.quantity %}{{ (l.quantity)|qty }} × {% endif %}{{ l.item_description or l.need_description }}</td>
-      <td><span class="badge">{{ l.status }}</span></td></tr>{% endfor %}
-    </tbody></table>
-    {% else %}<p class="muted small">No cases yet.</p>{% endif %}
+  <div style="display:flex; gap:8px">
+    {% if phone %}<a class="btn" href="https://wa.me/{{ phone|replace('+', '') }}" target="_blank" rel="noopener">WhatsApp them</a>{% endif %}
   </div>
 </div>
 
-<div>
-  <div class="panel" style="overflow-x:auto">
-    <h2 style="margin-top:0">What they can provide</h2>
-    {% if p.stock %}
-    <table><thead><tr><th>Item</th><th>Quantity</th><th>Where</th><th></th></tr></thead><tbody>
-    {% for i in p.stock %}<tr {% if i.status != "available" %}style="opacity:.55"{% endif %}>
-      <td><strong>{{ category_labels.get(i.category, i.category) }}</strong><br><span class="small">{{ i.description }}</span>
-        {% if i.conditions %}<br><span class="small muted">{{ i.conditions }}</span>{% endif %}</td>
-      <td class="small">{{ i.quantity_text or "—" }}{% if i.quantity_total and i.committed %}<br><span class="muted">{{ (i.quantity_total - i.committed)|qty }} left</span>{% endif %}</td>
-      <td class="small">{{ i.location or "" }}{% if i.abroad %} <span class="badge b-partial">abroad</span>{% endif %}{% if i.availability %}<br><span class="muted">{{ i.availability }}</span>{% endif %}</td>
-      <td>{% if i.status == "available" %}<form class="inline" method="post" action="/partners/{{ p.id }}/items/{{ i.id }}/withdraw"><button type="submit">No longer available</button></form>{% else %}<span class="small muted">{{ i.status }}</span>{% endif %}</td>
-    </tr>{% endfor %}</tbody></table>
-    {% else %}<p class="muted small">Nothing listed yet.</p>{% endif %}
-    <details><summary>Add an item</summary>
-      <form method="post" action="/partners/{{ p.id }}/items">
-        <div class="row">
-          <div><label>Type of help</label><select name="category">{% for c in categories %}<option value="{{ c }}">{{ category_labels.get(c, c) }}</option>{% endfor %}</select></div>
-          <div style="flex:2"><label>What exactly</label><input type="text" name="description" required placeholder="Refurbished laptops"></div>
-          <div><label>How many / how much</label><input type="text" name="quantity" placeholder="50 laptops"></div>
-        </div>
-        <div class="row">
-          <div><label>Where are they now</label><input type="text" name="location" placeholder="Toronto, Canada"></div>
-          <div><label>When</label><input type="text" name="availability"></div>
-          <div><label>Conditions</label><input type="text" name="conditions"></div>
-        </div>
-        <label class="check"><input type="checkbox" name="abroad" value="1"> Outside Cameroon (needs shipping)</label>
-        <p><button type="submit">Add item</button></p>
-      </form>
-    </details>
-  </div>
+<div class="ptabs" role="tablist">
+  <button role="tab" aria-selected="true" data-tab="help">Can help now<span class="n">{{ can_help|length }}</span></button>
+  <button role="tab" aria-selected="false" data-tab="offers">Offers<span class="n">{{ p.stock|selectattr("status", "equalto", "available")|list|length }}</span></button>
+  <button role="tab" aria-selected="false" data-tab="work">Work with PS43<span class="n">{{ p.history|length }}</span></button>
+  <button role="tab" aria-selected="false" data-tab="details">Trust and notes</button>
+</div>
 
-  <div class="panel" style="margin-top:16px; overflow-x:auto">
-    <h2 style="margin-top:0">Schools they could help now ({{ can_help|length }})</h2>
-    {% if can_help %}
-    <table><thead><tr><th>Need</th><th>Fit</th><th></th></tr></thead><tbody>
-    {% for r in can_help %}<tr>
-      <td><a href="/tickets/{{ r.ticket.id }}"><strong>{{ r.ticket.school }}</strong></a><br>
-        <span class="small">{{ category_labels.get(r.ticket.category, r.ticket.category)|capitalize }}{% if r.ticket.quantity_text %} · {{ r.ticket.quantity_text }}{% endif %}</span><br>
-        <span class="small muted">{{ r.best.reasons[:2]|join(" · ") }}</span></td>
-      <td><strong>{{ r.best.score }}</strong></td>
-      <td>{% if r.best.exact %}<form method="post" action="/tickets/{{ r.ticket.id }}/assign">
+<section class="ppane" id="tab-help">
+  {% if can_help %}
+  <div class="rows">
+  {% for r in can_help %}
+    <div class="r">
+      <div>
+        <div class="t"><a href="/tickets/{{ r.ticket.id }}" style="color:inherit; text-decoration:none">{{ r.ticket.school }}</a></div>
+        <div class="s">Needs {{ category_labels.get(r.ticket.category, r.ticket.category) }}{% if r.ticket.quantity_text %} ({{ r.ticket.quantity_text }}){% endif %}. {{ r.best.reasons[:2]|join(", ")|capitalize }}.</div>
+      </div>
+      <div>{% if r.best.exact %}<form method="post" action="/tickets/{{ r.ticket.id }}/assign">
           <input type="hidden" name="donor_id" value="{{ p.id }}"><input type="hidden" name="item_id" value="{{ r.best.item_id }}">
           <input type="hidden" name="quantity" value="{{ (r.best.covers)|qty if r.best.covers else '' }}"><input type="hidden" name="back" value="/partners/{{ p.id }}">
           <button class="primary" type="submit">Assign{% if r.best.covers %} {{ (r.best.covers)|qty }}{% endif %}</button></form>
-        {% else %}<a class="btn" href="/tickets/{{ r.ticket.id }}">Look</a>{% endif %}</td></tr>{% endfor %}
-    </tbody></table>
-    {% else %}<p class="muted small">No open school need matches what they offer right now.</p>{% endif %}
+        {% else %}<a class="btn" href="/tickets/{{ r.ticket.id }}">Look</a>{% endif %}</div>
+    </div>
+  {% endfor %}
   </div>
-</div>
-</div>
+  {% else %}<div class="panel"><p style="margin:0">No open school need matches what they offer right now. Add an offer, or check back when new schools write in.</p></div>{% endif %}
+</section>
+
+<section class="ppane" id="tab-offers" hidden>
+  <div class="rows">
+  {% for i in p.stock %}
+    <div class="r {{ 'gone' if i.status != 'available' }}">
+      <div>
+        <div class="t">{{ category_labels.get(i.category, i.category)|capitalize }}: {{ i.description }}</div>
+        <div class="s">{{ i.quantity_text or "Quantity not given" }}{% if i.quantity_total and i.committed %}, {{ (i.quantity_total - i.committed)|qty }} left{% endif %}{% if i.location %}. In {{ i.location }}{% endif %}{% if i.abroad %} (needs shipping){% endif %}{% if i.availability %}. {{ i.availability }}{% endif %}{% if i.conditions %}. {{ i.conditions }}{% endif %}</div>
+      </div>
+      <div>{% if i.status == "available" %}<form method="post" action="/partners/{{ p.id }}/items/{{ i.id }}/withdraw"><button type="submit">No longer available</button></form>{% else %}<span class="small muted">{{ i.status }}</span>{% endif %}</div>
+    </div>
+  {% else %}<div class="r"><div class="s">Nothing listed yet.</div></div>{% endfor %}
+  </div>
+  <details class="more-box"><summary>Add an offer</summary>
+    <form method="post" action="/partners/{{ p.id }}/items">
+      <div class="row">
+        <div><label for="ic">Type of help</label><select id="ic" name="category">{% for c in categories %}<option value="{{ c }}">{{ category_labels.get(c, c) }}</option>{% endfor %}</select></div>
+        <div style="flex:2"><label for="id">What exactly</label><input id="id" type="text" name="description" required placeholder="Refurbished laptops"></div>
+        <div><label for="iq">How many</label><input id="iq" type="text" name="quantity" placeholder="50 laptops"></div>
+      </div>
+      <div class="row">
+        <div><label for="il">Where they are now</label><input id="il" type="text" name="location" placeholder="Toronto, Canada"></div>
+        <div><label for="ia">When</label><input id="ia" type="text" name="availability"></div>
+        <div><label for="ico">Conditions</label><input id="ico" type="text" name="conditions"></div>
+      </div>
+      <label class="check"><input type="checkbox" name="abroad" value="1"> Outside Cameroon (needs shipping)</label>
+      <p><button class="primary" type="submit">Add offer</button></p>
+    </form>
+  </details>
+</section>
+
+<section class="ppane" id="tab-work" hidden>
+  <div class="rows">
+  {% for l in p.history %}
+    <div class="r">
+      <div><div class="t"><a href="/tickets/{{ l.ticket_id }}" style="color:inherit; text-decoration:none">{{ (l.case_title or l.case_number)|truncate(70) }}</a></div>
+        <div class="s">{% if l.quantity %}{{ (l.quantity)|qty }} × {% endif %}{{ l.item_description or l.need_description }}. {{ l.created_at|ago|capitalize }}.</div></div>
+      <span class="badge b-{{ 'checked' if l.status == 'completed' else ('cancelled' if l.status == 'cancelled' else 'matched') }}">{{ {"committed": "Committed", "delivered": "Delivered", "completed": "Confirmed by school", "cancelled": "Cancelled"}.get(l.status, l.status) }}</span>
+    </div>
+  {% else %}<div class="r"><div class="s">No work with PS43 yet.</div></div>{% endfor %}
+  </div>
+</section>
+
+<section class="ppane" id="tab-details" hidden>
+  <div class="grid2">
+    <div class="panel">
+      <h2 style="margin-top:0">Trust {{ p.trust.score }} of 100</h2>
+      <div class="meter"><i style="width:{{ p.trust.score }}%"></i></div>
+      <ul class="small">{% for r in p.trust.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
+      <form method="post" action="/partners/{{ p.id }}/verify">
+        {% if p.verified %}<input type="hidden" name="verified" value="0"><span class="small">Identity checked by {{ p.verified_by }}.</span> <button type="submit">Undo</button>
+        {% else %}<input type="hidden" name="verified" value="1"><button class="primary" type="submit">I checked who they are</button>
+        <p class="small muted">Registration papers, references or a visit.</p>{% endif %}
+      </form>
+      <p class="small muted">Trust rises only when a school confirms their work.</p>
+    </div>
+    <div class="panel">
+      <h2 style="margin-top:0">About them</h2>
+      {% if p.amount %}<p class="small"><strong>Money offered:</strong> {{ p.amount }}</p>{% endif %}
+      {% if p.timeframe %}<p class="small"><strong>Available:</strong> {{ p.timeframe }}</p>{% endif %}
+      {% if p.conditions %}<p class="small"><strong>Their conditions:</strong> {{ p.conditions }}</p>{% endif %}
+      {% if p.past_work_note %}<p class="small"><strong>Say they worked with PS43 before:</strong> {{ p.past_work_note }} <span class="muted">(not counted until confirmed)</span></p>{% endif %}
+      <form method="post" action="/partners/{{ p.id }}/notes">
+        <label>What they do</label>
+        <div class="row">{% for r, label in role_labels.items() %}<label class="check" style="flex:0 0 auto"><input type="checkbox" name="roles" value="{{ r }}" {% if r in p.roles %}checked{% endif %}> {{ label }}</label>{% endfor %}</div>
+        <label for="nt">Staff notes</label><textarea id="nt" name="notes" rows="3">{{ p.notes or "" }}</textarea>
+        <p><button type="submit">Save</button></p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  const tabs = [...document.querySelectorAll(".ptabs [data-tab]")];
+  function show(name) {
+    if (!document.getElementById("tab-" + name)) name = "help";
+    tabs.forEach(t => t.setAttribute("aria-selected", t.dataset.tab === name ? "true" : "false"));
+    document.querySelectorAll(".ppane").forEach(p => p.hidden = p.id !== "tab-" + name);
+    history.replaceState(null, "", "#" + name);
+  }
+  tabs.forEach(t => t.addEventListener("click", () => show(t.dataset.tab)));
+  const h = location.hash.replace("#", "");
+  show(h || ({{ 'true' if can_help else 'false' }} ? "help" : "offers"));
+})();
+</script>
 {% endblock %}

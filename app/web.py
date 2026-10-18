@@ -286,10 +286,11 @@ def approve(summary_id: int, notes: str = Form(""), who: str = Depends(staff)):
     workflow.refresh_case(s["thread_id"], who)
     extra = ""
     if made.get("tickets"):
-        extra = f" {len(made['tickets'])} new ticket(s) opened for its needs."
+        n = len(made["tickets"])
+        extra = f" {n} need{'' if n == 1 else 's'} added to the Needs board."
     elif made.get("partner"):
         extra = f" {made['partner']['name']} is in the partners database."
-    return _back(s["thread_id"], msg=f"Case {case_number} approved.{extra} New messages from this contact keep coming into it.")
+    return _back(s["thread_id"], msg=f"Case {case_number} approved.{extra}", approved="1")
 
 
 @router.post("/summaries/{summary_id}/reject")
