@@ -7,7 +7,11 @@
 <style>
 /* ---------- header ---------- */
 .case-top { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin: 4px 0 18px; }
-.case-top .who { flex: 1 1 420px; min-width: 0; }
+.case-top .who { flex: 1 1 420px; min-width: 0; display: flex; gap: 16px; align-items: center; }
+.case-top .who > div { min-width: 0; }
+.banner { border-radius: 14px; overflow: hidden; margin: 0 0 16px; }
+.photos { display: flex; gap: 8px; overflow-x: auto; margin: 0 0 16px; }
+.photos a { flex: 0 0 auto; } .photos img { height: 110px; width: auto; border-radius: 10px; display: block; }
 .case-top h1 { margin: 0 0 6px; font-size: 34px; }
 .facts { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: 15px; align-items: center; }
 .facts b { color: var(--ink); font-weight: 700; }
@@ -132,6 +136,8 @@
 {# ---------------- header ---------------- #}
 <div class="case-top">
   <div class="who">
+    {{ ui.avatar(contact.display_name or org.name or contact.address, "/avatar/contact/" ~ contact.id if contact.avatar_path else None, 64) }}
+    <div>
     <h1>{{ org.name or contact.display_name or contact.address }}</h1>
     <div class="facts">
       <span class="state s-{{ thread.status }}">{{ STATUS[thread.status] }}</span>
@@ -142,6 +148,7 @@
       <span>{{ thread.case_number }}</span>
       {% if d and d.location and d.location.latitude is not none %}<a href="https://maps.google.com/?q={{ d.location.latitude }},{{ d.location.longitude }}" target="_blank" rel="noopener">{{ ui.icon("map", 14) }} Map</a>{% endif %}
       {% if contact.consent_status == "opted_out" %}<span style="color:var(--bad)">Opted out</span>{% endif %}
+    </div>
     </div>
   </div>
   <div class="acts">
@@ -215,6 +222,10 @@
 {% else %}
   {% if summary.version > 1 and d.what_changed and d.what_changed != "New case" and summary.status == "draft" %}
   <div class="flash warn"><strong>Updated from new messages:</strong> {{ d.what_changed }}</div>
+  {% endif %}
+  {% set pics = items|selectattr("kind", "equalto", "image")|selectattr("media_path")|selectattr("direction", "equalto", "in")|list %}
+  {% if pics %}
+  <div class="photos" aria-label="Photos they sent">{% for it in pics|reverse %}<a href="#item-{{ it.id }}" class="cite-photo" data-item="{{ it.id }}" title="See the message"><img src="/media/{{ it.id }}" alt="Photo sent by {{ first_name }}" loading="lazy"></a>{% endfor %}</div>
   {% endif %}
   <div class="sum">
     <div>
@@ -488,7 +499,7 @@
       <div>
         <div class="need-name">{{ category_labels.get(k.category, k.category)|capitalize }}{% if k.quantity_text %}, {{ k.quantity_text }}{% endif %}</div>
         {% if r.picks %}
-        <div class="who">{% for c in r.picks %}<a href="/partners/{{ c.donor_id }}"><b>{{ c.donor_name }}</b></a>{% if c.covers %} gives {{ (c.covers)|qty }}{% endif %}{% if c.abroad %} (abroad){% endif %}{% if not loop.last %} and {% endif %}{% endfor %}</div>
+        <div class="who" style="display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center">{% for c in r.picks %}{{ ui.avatar(c.donor_name, "/partners/" ~ c.donor_id ~ "/logo", 28, True) }}<a href="/partners/{{ c.donor_id }}"><b>{{ c.donor_name }}</b></a>{% if c.covers %} gives {{ (c.covers)|qty }}{% endif %}{% if c.abroad %} (abroad){% endif %}{% if not loop.last %} and {% endif %}{% endfor %}</div>
         <div class="why">{% if r.plan.type == "related" %}Related help only: worth a call{% elif r.plan.type == "partial" %}Covers part of it{% elif r.plan.type == "combined" %}Together they cover it{% else %}{{ r.picks[0].reasons[:2]|join(", ")|capitalize }}{% endif %}</div>
         {% else %}<div class="why">No partner offers this yet.</div>{% endif %}
       </div>
@@ -519,7 +530,7 @@
   if (h.startsWith("item-")) { show("messages"); const el = document.getElementById(h); if (el) { el.classList.add("hl"); el.scrollIntoView(); } }
   else if (h && h !== "review") show(h);
   // citations jump to the message behind the fact
-  document.querySelectorAll("a.cite").forEach(a => a.addEventListener("click", e => {
+  document.querySelectorAll("a.cite, a.cite-photo").forEach(a => a.addEventListener("click", e => {
     e.preventDefault(); show("messages");
     const el = document.querySelector(a.getAttribute("href"));
     document.querySelectorAll(".item.hl").forEach(x => x.classList.remove("hl"));

@@ -18,7 +18,7 @@
 .group-h h2 { margin: 0; font-size: 18px; }
 .group-h span { color: var(--muted); font-size: 13px; }
 .list { display: flex; flex-direction: column; gap: 8px; }
-.conv { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 10px 16px;
+.conv { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 10px 16px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 12px; text-decoration: none; color: var(--ink); }
 .conv:hover { border-color: var(--green); }
 .conv .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
@@ -34,7 +34,7 @@
 .conv .state { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .warnline { color: var(--bad); }
 .empty { padding: 28px; text-align: center; color: var(--muted); background: var(--panel); border: 1px dashed var(--line); border-radius: 12px; }
-@media (max-width: 640px) { .conv { grid-template-columns: 10px minmax(0, 1fr); } .conv .side { grid-column: 2; flex-direction: row; justify-content: space-between; align-items: center; } }
+@media (max-width: 640px) { .conv { grid-template-columns: 44px minmax(0, 1fr); } .conv .side { grid-column: 2; flex-direction: row; justify-content: space-between; align-items: center; } }
 </style>
 {% endblock %}
 {% block body %}
@@ -42,7 +42,7 @@
 {% macro row(t) %}
 {% set name, need = (t.title|split_title) %}
 <a class="conv s-{{ t.status }}" href="/threads/{{ t.id }}">
-  <span class="dot" title="{{ LABEL[t.status] }}"></span>
+  <span style="position:relative">{{ ui.avatar(t.display_name or name or t.address, "/avatar/contact/" ~ t.contact_id if t.avatar_path else None, 44) }}<span class="dot" title="{{ LABEL[t.status] }}" style="position:absolute; right:-2px; bottom:-2px; width:13px; height:13px; border:2px solid var(--panel)"></span></span>
   <span>
     <div class="who">{{ name or t.display_name or t.address }}</div>
     {% if t.is_partner %}<div class="what">{{ "Offers help" if need == "offer" or not need else "Offers " ~ need }}</div>

@@ -1,9 +1,11 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}{{ p.name }}{% endblock %}
 {% block head %}
 <style>
 .case-top { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin: 4px 0 6px; }
-.case-top .who { flex: 1 1 420px; min-width: 0; }
+.case-top .who { flex: 1 1 420px; min-width: 0; display: flex; gap: 16px; align-items: flex-start; }
+.case-top .who > div { min-width: 0; }
 .case-top h1 { margin: 0 0 6px; font-size: 34px; }
 .facts { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: 15px; align-items: center; }
 .trust { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--ink); }
@@ -26,6 +28,8 @@
 
 <div class="case-top">
   <div class="who">
+    {{ ui.avatar(p.name, "/partners/" ~ p.id ~ "/logo" if (p.logo_path or p.contact_avatar) else None, 72, True) }}
+    <div>
     <h1>{{ p.name }}</h1>
     <div class="facts">
       <span class="trust t-{{ p.trust.level }}" title="Trust {{ p.trust.score }}/100"><i></i>{{ p.trust.level }}</span>
@@ -35,6 +39,7 @@
       {% if thread %}<a href="/threads/{{ thread.id }}">Their conversation</a>{% endif %}
     </div>
     {% if p.summary %}<p class="lead">{{ p.summary }}</p>{% endif %}
+    </div>
   </div>
   <div style="display:flex; gap:8px">
     {% if phone %}<a class="btn" href="https://wa.me/{{ phone|replace('+', '') }}" target="_blank" rel="noopener">WhatsApp them</a>{% endif %}
@@ -129,6 +134,11 @@
       {% if p.timeframe %}<p class="small"><strong>Available:</strong> {{ p.timeframe }}</p>{% endif %}
       {% if p.conditions %}<p class="small"><strong>Their conditions:</strong> {{ p.conditions }}</p>{% endif %}
       {% if p.past_work_note %}<p class="small"><strong>Say they worked with PS43 before:</strong> {{ p.past_work_note }} <span class="muted">(not counted until confirmed)</span></p>{% endif %}
+      <form method="post" action="/partners/{{ p.id }}/logo" enctype="multipart/form-data" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px">
+        {{ ui.avatar(p.name, "/partners/" ~ p.id ~ "/logo" if (p.logo_path or p.contact_avatar) else None, 40, True) }}
+        <label for="lg" style="margin:0">Logo</label><input id="lg" type="file" name="logo" accept="image/*" required style="max-width:220px">
+        <button type="submit">Upload</button>
+      </form>
       <form method="post" action="/partners/{{ p.id }}/notes">
         <label>What they do</label>
         <div class="row">{% for r, label in role_labels.items() %}<label class="check" style="flex:0 0 auto"><input type="checkbox" name="roles" value="{{ r }}" {% if r in p.roles %}checked{% endif %}> {{ label }}</label>{% endfor %}</div>

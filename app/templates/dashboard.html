@@ -25,38 +25,96 @@
 .boxes .card { margin-bottom: 8px; }
 .scores { display: flex; gap: 10px; font-size: 12.5px; color: var(--muted); margin: 4px 0; }
 .scores b { color: var(--ink); }
+
+/* groups: who to help first */
+.groups { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 14px 0 6px; }
+@media (max-width: 960px) { .groups { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.grp { text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line);
+  border-top: 6px solid var(--q); background: var(--panel); color: var(--ink); cursor: pointer; font-weight: 400; }
+.grp strong { font-size: 30px; line-height: 1.05; }
+.grp b { font-size: 15px; } .grp span { font-size: 12.5px; color: var(--muted); }
+.grp[aria-pressed=true] { box-shadow: 0 0 0 3px var(--q); }
+.grp:disabled { opacity: .45; cursor: default; }
+/* school cards */
+.schools { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
+.sc { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+  text-decoration: none; color: var(--ink); position: relative; }
+.sc:hover { border-color: var(--green); }
+.sc[hidden] { display: none; }
+.sc .tag { position: absolute; top: 10px; left: 10px; background: var(--q); color: var(--qt); font-weight: 700; font-size: 12.5px;
+  padding: 3px 10px; border-radius: 999px; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+.sc .pend { position: absolute; top: 10px; right: 10px; }
+.sc .b { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.sc .name { font-weight: 700; font-size: 17px; line-height: 1.2; }
+.sc .place { font-size: 13.5px; color: var(--muted); }
+.sc .lvl { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 2px 8px; font-size: 14px; align-items: baseline; }
+.sc .lvl dt { color: var(--muted); } .sc .lvl dd { margin: 0; }
+.sc .lvl .hi { color: var(--bad); font-weight: 700; } .sc .lvl .ok { color: var(--accent); font-weight: 700; } .sc .lvl .mid { color: var(--warn); font-weight: 700; }
+.sc .probs { font-size: 13.5px; }
+.sc .foot { margin-top: auto; padding-top: 6px; display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.sc .why { font-size: 13px; }
+.views { margin-top: 18px; }
+.empty-g { padding: 22px; text-align: center; color: var(--muted); background: var(--panel); border: 1px dashed var(--line); border-radius: 12px; }
 </style>
 {% endblock %}
 {% block body %}
+{% macro need_word(n) %}{% if n >= 70 %}<span class="hi">Very high</span>{% elif n >= 50 %}<span class="hi">High</span>{% elif n >= 30 %}<span class="mid">Some</span>{% else %}<span class="ok">Low</span>{% endif %}{% endmacro %}
+{% macro ready_word(c) %}{% set n = c.score.readiness %}{% if n >= 70 %}<span class="ok">Ready</span>{% elif n >= 40 %}<span class="mid">Partly</span>{% else %}<span class="hi">Not yet</span>{% endif %}{% if c.score.not_ready and n < 70 %}<span class="muted">: no {{ c.score.not_ready[:2]|join(", no ") }}</span>{% endif %}{% endmacro %}
 {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
 {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
 <div class="row" style="align-items:center">
-  <h1 style="flex:3; margin-bottom:4px">Schools by priority</h1>
-  <form method="get" style="flex:0 0 220px"><select name="region" onchange="this.form.submit()">
+  <div style="flex:3"><h1 style="margin-bottom:2px">Schools</h1>
+    <p class="muted" style="margin:0">Who to help first. A school moves as soon as it sends new information.{% if kpis.helped %} <a href="/impact">{{ kpis.helped }} already helped</a>.{% endif %}</p></div>
+  <form method="get" style="flex:0 0 200px"><select name="region" onchange="this.form.submit()" aria-label="Region">
     <option value="">All regions</option>{% for r in regions %}<option {% if r == region %}selected{% endif %}>{{ r }}</option>{% endfor %}
   </select></form>
 </div>
-<p class="muted small" style="margin-top:0">Need = what is missing × pupils. Ready = can the school receive help. Updates with every new message.{% if kpis.helped %} · <a href="/impact">{{ kpis.helped }} school{{ "" if kpis.helped == 1 else "s" }} already helped →</a>{% endif %}</p>
+{% if followups %}<p class="small" style="margin:8px 0 0"><a href="/today#followups">{{ followups|length }} school{{ "" if followups|length == 1 else "s" }} to ask whether the help still works</a></p>{% endif %}
 
-<div class="kpis">
-  <div><strong>{{ kpis.schools }}</strong><span>schools ranked</span></div>
-  <div><strong style="color:var(--bad)">{{ kpis.act_now }}</strong><span>to act on now</span></div>
-  <div><strong>{{ kpis.open_needs }}</strong><span>needs waiting for a partner</span></div>
-  <div><strong style="color:{{ 'var(--bad)' if kpis.hold else 'inherit' }}">{{ kpis.hold }}</strong><span>on safety hold</span></div>
+<div class="groups" role="group" aria-label="Show a group">
+{% for q, info in view.quadrants.items() %}{% set label, help = info %}
+  <button type="button" class="grp q-{{ q }}" data-q="{{ q }}" aria-pressed="false" {% if not view.boxes[q] %}disabled{% endif %}>
+    <strong>{{ view.boxes[q]|length }}</strong><b>{{ label }}</b><span>{{ help }}</span></button>
+{% endfor %}
 </div>
 
-{% if followups %}<p class="small"><a href="/today#followups">{{ followups|length }} follow-up{{ "" if followups|length == 1 else "s" }} due: send them from Today →</a></p>{% endif %}
+<div class="ptabs views" role="tablist">
+  <button role="tab" aria-selected="true" data-view="cards">Schools<span class="n">{{ view.cases|length }}</span></button>
+  <button role="tab" aria-selected="false" data-view="chart">Priority chart</button>
+  <button role="tab" aria-selected="false" data-view="map">Map</button>
+</div>
 
-<nav class="tabs" role="tablist">
-  <a href="#matrix" data-tab="matrix" class="on">{{ ui.icon("grid") }} Matrix</a>
-  <a href="#map" data-tab="map">{{ ui.icon("map") }} Map</a>
-  <a href="#list" data-tab="list">{{ ui.icon("list") }} List</a>
-</nav>
+<section class="ppane" id="view-cards">
+{% if view.cases %}
+<div class="schools">
+{% for c in view.cases %}{% set q = c.score.quadrant %}
+  <a class="sc q-{{ q }}" data-q="{{ q }}" href="/threads/{{ c.thread.id }}">
+    {{ ui.cover(c.thread.cover_item_id, c.score.name, 130, ((c.data.needs|selectattr("urgency", "equalto", "critical")|list or c.data.needs)[0].category if c.data.needs else None)) }}
+    <span class="tag" title="{{ c.score.why }}">{{ c.score.quadrant_label }}</span>
+    {% if c.pending == "new" %}<span class="pend badge b-draft_ready" title="Ranked from the AI summary: approve it to open needs">not reviewed yet</span>
+    {% elif c.pending == "update" %}<span class="pend badge b-draft_ready" title="New messages changed the summary since it was approved">updated · check it</span>{% endif %}
+    <span class="b">
+      <span class="name">{{ c.score.name }}</span>
+      <span class="place">{{ [c.score.town, c.score.region]|select|join(", ") or "Place not known" }}{% if c.score.students %}, {{ c.score.students }} pupils{% endif %}</span>
+      <dl class="lvl"><dt>Need</dt><dd>{{ need_word(c.score.need) }}</dd><dt>Ready</dt><dd>{{ ready_word(c) }}</dd></dl>
+      {% if c.score.gaps %}<span class="probs">{{ c.score.gaps[:2]|join(", ")|capitalize }}.</span>{% endif %}
+      {% if c.score.vulnerable %}<span class="probs" style="color:var(--bad)">Children at risk: {{ c.score.vulnerable[:1]|join(", ") }}.</span>{% endif %}
+      <span class="foot">{{ ui.avatar(c.thread.display_name or c.score.name, "/avatar/contact/" ~ c.thread.contact_id if c.thread.avatar_path else None, 24) }}
+        {% set open_t = c.tickets|rejectattr("status", "in", ["checked", "cancelled"])|list %}
+        <span>{% if open_t %}{{ open_t|length }} open need{{ "" if open_t|length == 1 else "s" }}{% set found = open_t|rejectattr("status", "equalto", "new")|list|length %}{% if found %}, {{ found }} with a partner{% endif %}{% elif c.pending == "new" %}Needs open once approved{% else %}No open needs{% endif %}</span></span>
+    </span>
+  </a>
+{% endfor %}
+</div>
+<p class="empty-g" id="nogroup" hidden>No school in this group.</p>
+{% else %}
+<div class="empty-g">No school to rank yet. When a school writes in, its summary appears here, even before you approve it.</div>
+{% endif %}
+</section>
 
-<div class="tabpane on" id="pane-matrix">
+<section class="ppane" id="view-chart" hidden>
 <div class="grid2">
   <div class="panel matrix">
-    <h2 style="margin-top:0">Priority matrix</h2>
     <svg viewBox="0 0 {{ W }} {{ H }}" role="img" aria-label="Schools by need (up) and readiness (right)">
       <rect class="bg" x="{{ L }}" y="8" width="{{ W - L - 8 }}" height="{{ H - B - 8 }}" rx="8"/>
       {% set mx = L + (W - L - 8) / 2 %}{% set my = 8 + (H - B - 8) / 2 %}
@@ -74,39 +132,18 @@
           <text class="lbl" x="{{ p.lx }}" y="{{ p.ly }}" text-anchor="{{ 'end' if p.left else 'start' }}">{{ p.name }}</text></a>
       {% endfor %}
     </svg>
-    <p class="small muted">Dot size = number of pupils. Closed or unsafe schools are not plotted: see Safety hold.</p>
+    <p class="small muted">Up = more need. Right = more ready to receive help. Bigger dot = more pupils. Schools that are closed or unsafe are not plotted.</p>
   </div>
-  <div>
-<h2 style="margin-top:0">What to do with each school</h2>
-<div class="boxes">
-{% for q, info in view.quadrants.items() %}{% set label, help = info %}
-  <div class="q-{{ q }}">
-    <h3 class="qhead">{{ label }} ({{ view.boxes[q]|length }})</h3>
-    <p class="small muted" style="margin-top:0">{{ help }}</p>
-    {% for c in view.boxes[q] %}
-    <div class="card">
-      <a class="title" href="/threads/{{ c.thread.id }}">{{ c.score.name }}</a>
-      {% if c.pending == "new" %}<span class="badge b-draft_ready" title="Scored from the AI draft: approve it to open needs">not reviewed yet</span>
-      {% elif c.pending == "update" %}<span class="badge b-draft_ready" title="New messages changed the draft since it was approved">updated · check it</span>{% endif %}
-      <div class="small muted">{{ [c.score.town, c.score.region]|select|join(", ") or "place not known" }}{% if c.score.students %} · {{ c.score.students }} pupils{% endif %}</div>
-      <div class="scores"><span>need</span> {{ ui.meter(c.score.need, "need") }} <span>ready</span> {{ ui.meter(c.score.readiness, "readiness") }}</div>
-      {% if c.score.gaps %}<div class="small">{{ c.score.gaps[:2]|join(" · ")|capitalize }}</div>{% endif %}
-      {% if q == "prepare_first" and c.score.not_ready %}<div class="small" style="color:var(--warn)">Prepare: {{ c.score.not_ready[:3]|join(", ") }}</div>
-      {% elif c.score.vulnerable %}<div class="small" style="color:var(--red)">At risk: {{ c.score.vulnerable[:1]|join(", ") }}</div>{% endif %}
-      <details class="small why"><summary style="margin:4px 0 0">Why?</summary>{{ c.score.why }}</details>
-      {% for k in c.tickets if k.status not in ("checked", "cancelled") %}
-        <a class="pill" href="/tickets/{{ k.id }}">{{ category_labels.get(k.category, k.category) }} · {{ status_labels[k.status] }}</a>
-      {% endfor %}
-    </div>
-    {% else %}<p class="small muted">None.</p>{% endfor %}
-  </div>
-{% endfor %}
-</div>
+  <div class="panel">
+    <h2 style="margin-top:0">How schools are grouped</h2>
+    <p class="small"><b>Need</b> adds up what is missing (classrooms, water, toilets, teachers, books...) and how many children are affected.
+      <b>Ready</b> checks whether the school can receive and look after help: power, phone signal, a lockable room, truck access, someone to maintain it and a parents' association.</p>
+    <p class="small">The weights can be changed in <a href="/settings">Settings</a>. Each school's page explains its group in plain words.</p>
   </div>
 </div>
-</div>
+</section>
 
-<div class="tabpane" id="pane-map">
+<section class="ppane" id="view-map" hidden>
 <div class="grid2">
   <div class="panel map">
     <h2 style="margin-top:0">Map</h2>
@@ -129,39 +166,30 @@
     </tbody></table>
   </div>
 </div>
-</div>
-
-<div class="tabpane" id="pane-list">
-  <div class="panel" style="overflow-x:auto">
-    <h2 style="margin-top:0">Ranked list</h2>
-    <table>
-      <thead><tr><th>School</th><th>Need</th><th>Ready to receive</th><th>Box</th><th>Open needs</th></tr></thead>
-      <tbody>
-      {% for c in view.cases %}
-      <tr class="clickable" onclick="location.href='/threads/{{ c.thread.id }}'">
-        <td><strong>{{ c.score.name }}</strong><br><span class="small muted">{{ [c.score.town, c.score.region]|select|join(", ") }}{% if c.score.students %} · {{ c.score.students }} pupils{% endif %}</span></td>
-        <td>{{ ui.meter(c.score.need, "need") }} <span class="small">{{ c.score.need }}</span></td><td>{{ ui.meter(c.score.readiness, "readiness") }} <span class="small">{{ c.score.readiness }}</span></td>
-        <td><span class="badge q-{{ c.score.quadrant }}" style="background:var(--q); color:var(--qt)">{{ c.score.quadrant_label }}</span></td>
-        <td>{{ c.open_tickets }}</td>
-      </tr>
-      {% else %}<tr><td colspan="5" class="muted">No approved school cases yet. Approve a school's draft in the inbox and it appears here.</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  </div>
-</div>
+</section>
 
 <script>
 (function () {
-  var tabs = document.querySelectorAll(".tabs a");
+  const views = [...document.querySelectorAll("[data-view]")];
   function show(name) {
-    tabs.forEach(function (a) { a.classList.toggle("on", a.dataset.tab === name); });
-    document.querySelectorAll(".tabpane").forEach(function (p) { p.classList.toggle("on", p.id === "pane-" + name); });
+    if (!document.getElementById("view-" + name)) name = "cards";
+    views.forEach(v => v.setAttribute("aria-selected", v.dataset.view === name ? "true" : "false"));
+    document.querySelectorAll(".ppane").forEach(p => p.hidden = p.id !== "view-" + name);
+    history.replaceState(null, "", location.pathname + location.search + "#" + name);
   }
-  tabs.forEach(function (a) { a.addEventListener("click", function (e) { e.preventDefault(); history.replaceState(null, "", "#" + a.dataset.tab); show(a.dataset.tab); }); });
-  var h = location.hash.replace("#", "");
-  if (["matrix", "map", "list"].indexOf(h) >= 0) show(h);
+  views.forEach(v => v.addEventListener("click", () => show(v.dataset.view)));
+  const h = location.hash.replace("#", "");
+  show({matrix: "chart", list: "cards"}[h] || h || "cards");
+  // groups filter the school cards
+  const groups = [...document.querySelectorAll(".grp")];
+  groups.forEach(g => g.addEventListener("click", () => {
+    const on = g.getAttribute("aria-pressed") !== "true";
+    groups.forEach(x => x.setAttribute("aria-pressed", x === g && on ? "true" : "false"));
+    let shown = 0;
+    document.querySelectorAll(".sc").forEach(c => { const ok = !on || c.dataset.q === g.dataset.q; c.hidden = !ok; if (ok) shown++; });
+    const e = document.getElementById("nogroup"); if (e) e.hidden = shown > 0;
+    show("cards");
+  }));
 })();
 </script>
 {% endblock %}

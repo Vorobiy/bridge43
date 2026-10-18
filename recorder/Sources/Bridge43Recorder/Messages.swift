@@ -20,6 +20,8 @@ let fullDiskAccessSettings = "x-apple.systempreferences:com.apple.preference.sec
 
 struct MessageState: Codable {
     var lastPK: Int64
+    /// Profile photo already sent per chat (chat id -> file name), so each photo goes up once.
+    var avatarsSent: [String: String]? = nil
 }
 
 /// What the message watcher is doing, for the menu bar.
@@ -197,6 +199,36 @@ final class ChatDB {
     }
 
     /// Where to start the first time: messages from the last 24 hours.
+    /// The chat's WhatsApp profile photo on disk, if WhatsApp has it: from its profile-picture table when there is
+    /// one, else the newest file in Media/Profile whose name starts with the chat's number.
+    func profilePhoto(jid: String) -> URL? {
+        let safe = jid.filter { $0.isLetter || $0.isNumber || "@._-".contains($0) }
+        var candidates: [URL] = []
+        if let cols = try? columns("ZWAPROFILEPICTUREITEM"), cols.contains("ZJID"), cols.contains("ZPATH") {
+            try? query("SELECT ZPATH FROM ZWAPROFILEPICTUREITEM WHERE ZJID = '\(safe)' ORDER BY Z_PK DESC LIMIT 1") { s in
+                if let p = ChatDB.str(s, 0), !p.isEmpty {
+                    for base in [whatsAppContainer, whatsAppContainer.appendingPathComponent("Message")] {
+                        let u = base.appendingPathComponent(p)
+                        candidates += [u.deletingPathExtension().appendingPathExtension("jpg"), u]
+                    }
+                }
+            }
+        }
+        let prefix = String(safe.prefix { $0 != "@" })
+        for dir in ["Media/Profile", "Message/Media/Profile"] {
+            let folder = whatsAppContainer.appendingPathComponent(dir)
+            let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+            let mine = files.filter { !prefix.isEmpty && $0.lastPathComponent.hasPrefix(prefix) }
+                .sorted { (a, b) in
+                    let da = (try? a.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                    let db = (try? b.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                    return da > db
+                }
+            candidates += mine.sorted { $0.pathExtension == "jpg" && $1.pathExtension != "jpg" }
+        }
+        return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
     func startPK() throws -> Int64 {
         var pk: Int64 = 0
         let cutoff = Date().addingTimeInterval(-24 * 3600).timeIntervalSinceReferenceDate
@@ -231,7 +263,7 @@ private func mimeType(_ ext: String) -> String {
 }
 
 /// Send one chat's messages; returns the case number if Bridge43 filed them, nil if it skipped the chat.
-func uploadChat(_ msgs: [WAMessage], context: [WAMessage], settings: Settings) async throws -> String? {
+func uploadChat(_ msgs: [WAMessage], context: [WAMessage], settings: Settings, avatar: Data? = nil) async throws -> String? {
     guard let first = msgs.first,
           let url = URL(string: settings.serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/recorder/messages") else {
         return nil
@@ -265,6 +297,12 @@ func uploadChat(_ msgs: [WAMessage], context: [WAMessage], settings: Settings) a
         body.append(("--\(boundary)\r\nContent-Disposition: form-data; name=\"files\"; filename=\"\(a.name)\"\r\n" +
                      "Content-Type: \(mimeType((a.name as NSString).pathExtension))\r\n\r\n").data(using: .utf8)!)
         body.append(a.data)
+        body.append("\r\n".data(using: .utf8)!)
+    }
+    if let avatar, !avatar.isEmpty, avatar.count < 2_000_000 {
+        body.append(("--\(boundary)\r\nContent-Disposition: form-data; name=\"avatar\"; filename=\"avatar.jpg\"\r\n" +
+                     "Content-Type: image/jpeg\r\n\r\n").data(using: .utf8)!)
+        body.append(avatar)
         body.append("\r\n".data(using: .utf8)!)
     }
     body.append("--\(boundary)--\r\n".data(using: .utf8)!)
@@ -321,7 +359,15 @@ func syncMessagesOnce(settings: Settings) async throws -> String? {
         guard !msgs.isEmpty else { continue }
         do {
             let context = try db.context(chat: chatPK, before: state.lastPK)
-            if let caseNumber = try await uploadChat(msgs, context: context, settings: settings) {
+            // their profile photo goes up once (and again only when it changes)
+            var avatarData: Data? = nil
+            var avatarName: String? = nil
+            if let photo = db.profilePhoto(jid: first.jid), state.avatarsSent?[first.jid] != photo.lastPathComponent {
+                avatarData = try? Data(contentsOf: photo)
+                avatarName = photo.lastPathComponent
+            }
+            if let caseNumber = try await uploadChat(msgs, context: context, settings: settings, avatar: avatarData) {
+                if let avatarName { state.avatarsSent = (state.avatarsSent ?? [:]).merging([first.jid: avatarName]) { $1 } }
                 log("💬 \(msgs.count) WhatsApp message\(msgs.count == 1 ? "" : "s") from \(name) → \(caseNumber)")
                 filedLine = "\(caseNumber) · \(name)"
             }

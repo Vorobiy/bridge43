@@ -185,3 +185,33 @@ def test_approving_opens_the_matches_popup(client, fakes):
         r = client.post(f"/tickets/{m['ticket']['id']}/assign-plan", data={"back": f"/threads/{draft['id']}?matches=1"},
                         follow_redirects=False)
         assert r.headers["location"].startswith(f"/threads/{draft['id']}?matches=1&msg=")
+
+
+def test_pictures_profile_photo_logo_and_school_cover(client, fakes, wa):
+    # their WhatsApp profile photo arrives with their messages and shows on the case and in the inbox
+    r = wa("+237670009001", "Notre école a besoin d'un toit", name="Mme Tamo", avatar=b"\xff\xd8\xff profile")
+    tid = r.json()["url"].rsplit("/", 1)[-1]
+    t = db.get_thread(int(tid))
+    assert client.get(f"/avatar/contact/{t['contact_id']}").content == b"\xff\xd8\xff profile"
+    assert f"/avatar/contact/{t['contact_id']}" in client.get("/").text
+    assert f"/avatar/contact/{t['contact_id']}" in client.get(f"/threads/{tid}").text
+    assert client.get("/avatar/contact/999999").status_code == 404
+
+    # a photo they send becomes the school's cover
+    wa("+237670009001", "Le toit", files=[("roof.jpg", b"\xff\xd8 roof")])
+    t = next(x for x in db.list_threads() if x["id"] == int(tid))
+    assert t["cover_item_id"] and f"/media/{t['cover_item_id']}" in client.get(f"/threads/{tid}").text
+
+    # partner logo: uploaded by staff, else their WhatsApp photo; initials when neither
+    _seed()
+    d = db.list_donors()[0]
+    assert client.get(f"/partners/{d['id']}/logo").status_code in (200, 404)
+    r = client.post(f"/partners/{d['id']}/logo", files={"logo": ("logo.png", b"\x89PNG fake", "image/png")}, follow_redirects=False)
+    assert r.status_code == 303 and "msg=" in r.headers["location"]
+    assert client.get(f"/partners/{d['id']}/logo").content == b"\x89PNG fake"
+    assert f"/partners/{d['id']}/logo" in client.get("/partners").text
+    bad = client.post(f"/partners/{d['id']}/logo", files={"logo": ("x.txt", b"hello", "text/plain")}, follow_redirects=False)
+    assert "error=" in bad.headers["location"]
+    # schools page: groups and cards render (drawing of the main problem when there is no photo)
+    page = client.get("/dashboard").text
+    assert "Who to help first" in page and "No photo yet" in page and 'class="grp' in page

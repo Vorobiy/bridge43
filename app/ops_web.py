@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
@@ -357,6 +357,34 @@ def partner_page(request: Request, donor_id: int, msg: str | None = None, error:
     phone = db.phone_of((contact or {}).get("reply_to") or (contact or {}).get("address"))
     return _render(request, "partner.html", p=p, contact=contact, thread=thread, phone=phone,
                    can_help=workflow.partner_can_help(donor_id), categories=NEED_CATEGORIES, msg=msg, error=error)
+
+
+@router.get("/partners/{donor_id}/logo")
+def partner_logo(donor_id: int):
+    from fastapi.responses import FileResponse
+    from . import media
+    d = _partner_or_404(donor_id)
+    rel = d.get("logo_path") or ((db.get_contact(d["contact_id"]) or {}).get("avatar_path") if d.get("contact_id") else None)
+    if not rel or not media.abs_path(rel).exists():
+        raise HTTPException(404)
+    path = media.abs_path(rel)
+    return FileResponse(path, media_type=media.guess_mime(path.name), headers={"Cache-Control": "max-age=3600"})
+
+
+@router.post("/partners/{donor_id}/logo")
+async def partner_logo_upload(donor_id: int, logo: UploadFile = File(...), who: str = Depends(staff)):
+    from . import media
+    _partner_or_404(donor_id)
+    data = await logo.read()
+    if not data:
+        return _go(f"/partners/{donor_id}", error="Choose an image file.")
+    if len(data) > 5 * 1024 * 1024:
+        return _go(f"/partners/{donor_id}", error="That image is too large (5 MB at most).")
+    mime = logo.content_type or media.guess_mime(logo.filename or "logo.png")
+    if not mime.startswith("image/"):
+        return _go(f"/partners/{donor_id}", error="The logo must be an image (PNG, JPG, WebP).")
+    db.set_donor(donor_id, logo_path=media.save_bytes(data, mime=mime, filename=logo.filename or "logo"))
+    return _go(f"/partners/{donor_id}", msg="Logo saved.")
 
 
 @router.post("/partners/{donor_id}/verify")

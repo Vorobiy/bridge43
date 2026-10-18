@@ -83,7 +83,7 @@ _ids = iter(range(1, 10**9))
 
 
 def send_whatsapp(client, phone, text=None, *, name=None, files=None, kind=None, from_me=False, msg_id=None,
-                  chat_id=None, at=None):
+                  chat_id=None, at=None, avatar=None):
     """A WhatsApp message arriving through the PS43 laptop (the menu bar app reads WhatsApp Desktop).
 
     files: [(filename, bytes)] attached to this one message (photo, voice note...).
@@ -103,6 +103,8 @@ def send_whatsapp(client, phone, text=None, *, name=None, files=None, kind=None,
         msgs.append({"id": mid, "at": at, "from_me": from_me, "kind": "text", "text": text or ""})
     chat = {"chat_id": chat_id or f"{phone.lstrip('+').replace(' ', '')}@s.whatsapp.net", "phone": phone, "name": name or "",
             "messages": msgs}
+    if avatar:
+        uploads.append(("avatar", ("avatar.jpg", avatar, "image/jpeg")))
     return client.post("/api/recorder/messages", data={"chat": json.dumps(chat)}, files=uploads,
                        headers={"Authorization": "Bearer tok"})
 

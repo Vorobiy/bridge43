@@ -255,6 +255,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_threads_case ON threads(case_number)")
     if "relevance_locked" not in _columns(conn, "threads"):
         conn.execute("ALTER TABLE threads ADD COLUMN relevance_locked INTEGER NOT NULL DEFAULT 0")
+    if "avatar_path" not in _columns(conn, "contacts"):
+        conn.execute("ALTER TABLE contacts ADD COLUMN avatar_path TEXT")  # WhatsApp profile photo
+    if "logo_path" not in _columns(conn, "donors"):
+        conn.execute("ALTER TABLE donors ADD COLUMN logo_path TEXT")      # partner logo uploaded by staff
     if "resolved_at" not in _columns(conn, "threads"):
         conn.execute("ALTER TABLE threads ADD COLUMN resolved_at TEXT")
     if "reply_to" not in _columns(conn, "contacts"):
@@ -516,7 +520,9 @@ def set_thread(thread_id: int, **fields: Any) -> None:
 
 def list_threads(status: str | None = None) -> list[dict[str, Any]]:
     q = (
-        "SELECT t.*, c.display_name, c.address, c.channel AS contact_channel, c.consent_status, "
+        "SELECT t.*, c.display_name, c.address, c.channel AS contact_channel, c.consent_status, c.avatar_path, "
+        "(SELECT i.id FROM items i WHERE i.thread_id = t.id AND i.kind = 'image' AND i.media_path IS NOT NULL "
+        " AND i.direction = 'in' ORDER BY i.sent_at DESC, i.id DESC LIMIT 1) AS cover_item_id, "
         "(SELECT COUNT(*) FROM items i WHERE i.thread_id = t.id) AS item_count, "
         "(SELECT COUNT(*) FROM items i WHERE i.thread_id = t.id AND i.status IN ('received','processing','awaiting_media')) AS pending_count, "
         "(SELECT COUNT(*) FROM items i WHERE i.thread_id = t.id AND i.status = 'failed') AS failed_count, "
@@ -726,7 +732,7 @@ def donor_for_contact(contact_id: int) -> dict[str, Any] | None:
 def list_donors() -> list[dict[str, Any]]:
     with tx() as conn:
         rows = conn.execute(
-            "SELECT d.*, c.address, c.reply_to, c.consent_status, t.case_number FROM donors d "
+            "SELECT d.*, c.address, c.reply_to, c.consent_status, c.avatar_path AS contact_avatar, t.case_number FROM donors d "
             "LEFT JOIN contacts c ON c.id = d.contact_id LEFT JOIN threads t ON t.id = d.thread_id "
             "ORDER BY d.name COLLATE NOCASE").fetchall()
         return [_decode_donor(dict(r)) for r in rows]
@@ -787,7 +793,7 @@ def set_donor_item(item_id: int, **fields: Any) -> None:
 # ---------------------------------------------------------------- tickets
 
 TICKET_SELECT = ("SELECT k.*, t.case_number, t.title AS case_title, t.contact_id, c.display_name, c.address, "
-                 "c.reply_to, c.consent_status FROM tickets k JOIN threads t ON t.id = k.thread_id "
+                 "c.reply_to, c.consent_status, c.avatar_path FROM tickets k JOIN threads t ON t.id = k.thread_id "
                  "JOIN contacts c ON c.id = t.contact_id ")
 
 

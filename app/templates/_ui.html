@@ -81,3 +81,29 @@
 </div>
 {% endif %}
 {%- endmacro %}
+
+{# A person's or partner's picture: their WhatsApp photo or logo when there is one, else coloured initials. #}
+{% macro avatar(name, src=None, size=40, square=False) -%}
+<span class="av {{ 'sq' if square else '' }}" style="--s:{{ size }}px; --h:{{ name|hue }}" aria-hidden="true"><span>{{ name|initials }}</span>{% if src %}<img src="{{ src }}" alt="" loading="lazy" onerror="this.remove()">{% endif %}</span>
+{%- endmacro %}
+
+{# A school's own photo (the latest one they sent); until then, a drawing of its biggest problem. #}
+{% set NEED_ART = {
+  "roofing": '<path d="M10 58L60 18l50 40"/><path d="M22 50v40h76V50"/><path d="M48 30l-6 10M66 26l4 12M80 40l-4 6" stroke-dasharray="4 5"/><path d="M40 70v-6M58 76v-8M76 68v-6" stroke-dasharray="3 5"/>',
+  "water": '<path d="M60 14C48 34 34 48 34 64a26 26 0 0052 0c0-16-14-30-26-50z"/><path d="M48 66a12 12 0 0012 12"/>',
+  "sanitation_latrines": '<rect x="34" y="20" width="52" height="70" rx="4"/><path d="M46 20v-6h28v6M60 40v14M48 90V72h24v18"/>',
+  "furniture": '<path d="M18 46h84M26 46v40M94 46v40M30 66h60M40 26h40v20"/>',
+  "classrooms_building": '<path d="M14 88V44l46-26 46 26v44z"/><path d="M50 88V64h20v24M26 52h14v12H26zM80 52h14v12H80z"/>',
+  "devices": '<rect x="26" y="26" width="68" height="44" rx="4"/><path d="M14 80h92l-8-10H22z"/>',
+  "learning_materials": '<path d="M60 30c-10-8-26-10-40-8v58c14-2 30 0 40 8 10-8 26-10 40-8V22c-14-2-30 0-40 8z"/><path d="M60 30v58"/>',
+  "electricity": '<path d="M66 12L34 62h24l-6 40 34-52H62z"/>',
+  "connectivity": '<path d="M24 52a50 50 0 0172 0M36 64a32 32 0 0148 0M48 76a14 14 0 0124 0"/><circle cx="60" cy="88" r="3"/>',
+  "teacher_training": '<circle cx="60" cy="34" r="12"/><path d="M36 92c0-16 10-28 24-28s24 12 24 28M20 20h30"/>',
+  "staffing": '<circle cx="44" cy="38" r="10"/><circle cx="76" cy="38" r="10"/><path d="M24 90c0-14 8-24 20-24s20 10 20 24M56 90c0-14 8-24 20-24s20 10 20 24"/>',
+  "safety_security": '<path d="M60 14l38 14v24c0 22-16 36-38 46-22-10-38-24-38-46V28z"/>',
+  "school_meals_health": '<path d="M30 54h60a30 30 0 01-60 0zM40 40c0-8 8-8 8-16M58 40c0-8 8-8 8-16M76 40c0-8 8-8 8-16"/>',
+  "birth_registration": '<rect x="28" y="16" width="64" height="84" rx="4"/><path d="M40 36h40M40 50h40M40 64h24"/>',
+} %}
+{% macro cover(item_id=None, label="", height=140, need=None) -%}
+<span class="cover" style="--ch:{{ height }}px">{% if item_id %}<img src="/media/{{ item_id }}" alt="Photo sent by {{ label }}" loading="lazy">{% else %}<svg viewBox="0 0 120 110" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">{{ (NEED_ART.get(need) or NEED_ART["classrooms_building"])|safe }}</svg>{% if height >= 90 %}<small>No photo yet</small>{% endif %}{% endif %}</span>
+{%- endmacro %}

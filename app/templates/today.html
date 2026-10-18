@@ -40,7 +40,7 @@
   <div class="panel" id="drafts" style="margin-bottom:16px">
     <div class="section-h"><span class="count">{{ v.drafts|length }}</span><h2>Check new requests</h2></div>
     {% for t in v.drafts[:6] %}
-    <div class="task"><div class="what"><strong>{{ t.title or t.display_name or t.address }}</strong>
+    <div class="task">{{ ui.avatar(t.display_name or t.title or t.address, "/avatar/contact/" ~ t.contact_id if t.avatar_path else None, 36) }}<div class="what"><strong>{{ t.title or t.display_name or t.address }}</strong>
       <span class="small muted">{{ t.case_number }} · {{ t.display_name or t.address }} · {{ t.last_item_at[:10] }}</span></div>
       <a class="btn primary" href="/threads/{{ t.id }}">Review</a></div>
     {% else %}<p class="done">No drafts waiting.</p>{% endfor %}

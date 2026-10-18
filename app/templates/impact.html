@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}Impact{% endblock %}
 {% block head %}
 <style>
@@ -10,7 +11,7 @@
 .big-kpis strong { display: block; font-family: var(--display); font-weight: 700; font-size: 40px; line-height: 1.05; }
 .big-kpis span { color: var(--muted); font-size: 13.5px; }
 .results { list-style: none; padding: 0; margin: 0; }
-.results li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.results li { display: grid; grid-template-columns: 86px minmax(0, 1fr) auto; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .results li:last-child { border-bottom: 0; }
 .results .school { font-weight: 700; font-size: 16px; }
 .results .what { font-size: 14.5px; margin-top: 2px; }
@@ -53,7 +54,7 @@
     {% if v.resolved %}
     <ul class="results">
     {% for r in v.resolved %}
-      <li><div>
+      <li><a href="/threads/{{ r.thread.id }}" style="border-radius:10px; overflow:hidden; display:block">{{ ui.cover(r.thread.cover_item_id, r.school, 64) }}</a><div>
           <div class="school"><a href="/threads/{{ r.thread.id }}" style="color:inherit;text-decoration:none">{{ r.school }}</a></div>
           <div class="what">{{ r.delivered|join(", ")|capitalize }}{% if r.partners %} · with {{ r.partners|join(", ") }}{% endif %}</div>
           <div class="meta">{{ r.thread.case_number }}{% if r.region %} · {{ r.region }}{% endif %} · resolved {{ r.resolved_at|ago }}{% if r.days is not none %} · took {{ r.days }} day{{ "" if r.days == 1 else "s" }}{% endif %}</div>

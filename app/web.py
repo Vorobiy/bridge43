@@ -69,7 +69,23 @@ def _split_title(title: str | None) -> tuple[str, str]:
     return (parts[0], parts[1]) if len(parts) == 2 else (title or "", "")
 
 
+def _initials(name: str | None) -> str:
+    """'Lycée des Hauts-Plateaux' -> 'LH', 'Mme Bih (EP Source de Vie)' -> 'MB'."""
+    import re as _re
+    words = [w for w in _re.split(r"[\s()/-]+", (name or "").strip()) if w and w[0].isalnum()
+             and w.lower() not in ("de", "des", "du", "la", "le", "les", "et", "of", "the", "and", "a", "à", "d'")]
+    return ("".join(w[0] for w in words[:2]) or "?").upper()
+
+
+def _hue(name: str | None) -> int:
+    """A stable colour per name, picked from the PS43 palette family."""
+    palette = [158, 205, 42, 0, 222, 175, 28]  # greens, blues, yellow, red, navy, teal, orange
+    return palette[sum(ord(c) for c in (name or "?")) % len(palette)]
+
+
 templates.env.filters["ago"] = _ago
+templates.env.filters["initials"] = _initials
+templates.env.filters["hue"] = _hue
 templates.env.filters["split_title"] = _split_title
 templates.env.tests["offer_title"] = lambda title: _split_title(title)[1].strip().lower() == "offer"
 
@@ -413,6 +429,18 @@ def media_file(item_id: int):
     if not path.exists():
         raise HTTPException(404)
     return FileResponse(path, media_type=item["media_mime"] or None)
+
+
+@router.get("/avatar/contact/{contact_id}")
+def contact_avatar(contact_id: int):
+    """The contact's WhatsApp profile photo (sent by the Mac app)."""
+    c = db.get_contact(contact_id)
+    if not c or not c.get("avatar_path"):
+        raise HTTPException(404)
+    path = media.abs_path(c["avatar_path"])
+    if not path.exists():
+        raise HTTPException(404)
+    return FileResponse(path, media_type=media.guess_mime(path.name), headers={"Cache-Control": "max-age=3600"})
 
 
 @router.get("/api/threads/{thread_id}")

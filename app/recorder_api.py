@@ -157,7 +157,7 @@ def _iso(at: str | None) -> str | None:
         return None
 
 
-def file_whatsapp_messages(payload: dict, files: dict[str, bytes]) -> dict:
+def file_whatsapp_messages(payload: dict, files: dict[str, bytes], avatar: bytes | None = None) -> dict:
     from . import db, media, triage
     from .processing import pipeline
 
@@ -191,6 +191,10 @@ def file_whatsapp_messages(payload: dict, files: dict[str, bytes]) -> dict:
         to_file = context + new   # the conversation so far belongs in the new case
 
     contact = db.get_or_create_contact(address, "whatsapp", name)
+    if avatar:  # their WhatsApp profile photo, shown on the case and in the inbox
+        with db.tx() as conn:
+            conn.execute("UPDATE contacts SET avatar_path = ? WHERE id = ?",
+                         (media.save_bytes(avatar, mime="image/jpeg", filename="avatar.jpg"), contact["id"]))
     thread = db.open_thread_for(contact["id"])
     created = []
     for m in sorted(to_file, key=lambda m: m.get("at") or ""):
@@ -224,6 +228,7 @@ def file_whatsapp_messages(payload: dict, files: dict[str, bytes]) -> dict:
 async def upload_messages(
     chat: str = Form(...),
     files: list[UploadFile] = File(default=[]),
+    avatar: UploadFile | None = File(default=None),
     authorization: str | None = Header(default=None),
 ) -> dict:
     """New messages from one WhatsApp Desktop chat, sent by the Mac menu bar app.
@@ -245,4 +250,5 @@ async def upload_messages(
         if total > MAX_BYTES:
             raise HTTPException(413, "attachments too large")
         blobs[f.filename or ""] = data
-    return await run_in_threadpool(file_whatsapp_messages, payload, blobs)
+    pic = await avatar.read() if avatar else None
+    return await run_in_threadpool(file_whatsapp_messages, payload, blobs, (pic or None) if pic and len(pic) < 2_000_000 else None)

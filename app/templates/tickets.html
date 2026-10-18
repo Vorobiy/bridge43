@@ -23,7 +23,7 @@
     <h3>{{ status_labels[status] }} <span class="muted">{{ items|length }}</span></h3>
     {% for k in (items[:6] if status == "checked" else items) %}
     <div class="card">
-      <a class="school" href="/tickets/{{ k.id }}">{{ k.school }}</a>
+      <a class="school" href="/tickets/{{ k.id }}" style="display:flex; gap:8px; align-items:center">{{ ui.avatar(k.display_name or k.school, "/avatar/contact/" ~ k.contact_id if k.avatar_path else None, 26) }}<span>{{ k.school }}</span></a>
       <div class="need">{{ category_labels.get(k.category, k.category)|capitalize }}{% if k.quantity_text %} · {{ k.quantity_text }}{% endif %}</div>
       <div class="foot">
         {% if k.urgency in ("critical", "high") and status not in ("checked",) %}<span class="badge b-{{ k.urgency }}">{{ k.urgency }}</span>{% endif %}

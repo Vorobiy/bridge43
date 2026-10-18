@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}Partners{% endblock %}
 {% block head %}
 <style>
@@ -10,7 +11,7 @@
   text-decoration: none; color: var(--ink); font-weight: 700; font-size: 14px; }
 .chip b { color: var(--muted); } .chip.on { background: var(--green); border-color: var(--green); color: #fff; } .chip.on b { color: #fff; }
 .plist { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
-.prow { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) 110px 150px; gap: 16px; align-items: center;
+.prow { display: grid; grid-template-columns: 44px minmax(0, 2.4fr) minmax(0, 1fr) 110px 150px; gap: 16px; align-items: center;
   padding: 14px 18px; border-top: 1px solid var(--line); text-decoration: none; color: var(--ink); }
 .prow:first-child { border-top: 0; }
 .prow:hover { background: var(--bg); } .prow[hidden] { display: none; }
@@ -23,7 +24,7 @@
 .help { text-align: right; font-size: 14px; }
 .help b { font-size: 18px; color: var(--accent); }
 .help.none { color: var(--muted); }
-@media (max-width: 760px) { .prow { grid-template-columns: minmax(0, 1fr) auto; } .prow .where { display: none; } .prow .trust { display: none; } }
+@media (max-width: 760px) { .prow { grid-template-columns: 40px minmax(0, 1fr) auto; } .prow .where { display: none; } .prow .trust { display: none; } }
 </style>
 {% endblock %}
 {% block body %}
@@ -34,14 +35,15 @@
   <button class="primary" type="button" onclick="document.getElementById('pop-add').showModal()">Add partner</button>
 </div>
 <div class="chips">
-  <a class="chip {{ 'on' if not role }}" href="/partners">All <b>{{ total }}</b></a>
-  {% for r, label in role_labels.items() %}<a class="chip {{ 'on' if role == r }}" href="/partners?role={{ r }}">{{ label }} <b>{{ role_counts[r] }}</b></a>{% endfor %}
+  <a class="chip {{ 'on' if not role }}" href="/partners">All <b>{{ total or partners|length }}</b></a>
+  {% for r, label in role_labels.items() %}<a class="chip {{ 'on' if role == r }}" href="/partners?role={{ r }}">{{ label }} <b>{{ (role_counts or {}).get(r, "") }}</b></a>{% endfor %}
 </div>
 
 {% if partners %}
 <div class="plist" id="plist">
 {% for p in partners %}
   <a class="prow" href="/partners/{{ p.id }}" data-text="{{ (p.name ~ ' ' ~ (p.summary or '') ~ ' ' ~ p.regions|join(' ') ~ ' ' ~ p.roles|join(' '))|lower }}">
+    {{ ui.avatar(p.name, "/partners/" ~ p.id ~ "/logo" if (p.logo_path or p.contact_avatar) else None, 44, True) }}
     <span><div class="name">{{ p.name }}</div><div class="gives">{{ p.summary or "No description yet" }}</div></span>
     <span class="where">{{ p.regions|join(", ") or "Anywhere" }}</span>
     <span class="trust t-{{ p.trust.level }}" title="Trust {{ p.trust.score }}/100"><i></i>{{ p.trust.level }}</span>
