@@ -156,3 +156,15 @@ def test_partner_page_assign_and_today_confirm(client, fakes):
     item = next(c for c in v["confirm"] if c["id"] == k["id"])
     resp = client.post(f"/tickets/{k['id']}/steps/{item['step_id']}/done", data={"back": "/today"}, follow_redirects=False)
     assert resp.headers["location"].startswith("/today") and db.get_ticket(k["id"])["status"] == "checked"
+
+
+def test_startup_resolves_cases_confirmed_before_the_update(client, fakes):
+    """Databases from before case resolution: a case whose needs are all confirmed becomes resolved at startup."""
+    _seed()
+    t = next(t for t in db.list_threads() if t["status"] == "resolved")
+    db.set_thread(t["id"], status="approved", resolved_at=None)  # as an older version left it
+    assert workflow.refresh_all_cases() >= 1
+    t2 = db.get_thread(t["id"])
+    delivered = max(k["delivered_at"] for k in db.list_tickets(thread_id=t["id"]))
+    assert t2["status"] == "resolved" and t2["resolved_at"] == delivered
+    assert workflow.refresh_all_cases() == 0  # nothing left to change

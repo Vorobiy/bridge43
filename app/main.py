@@ -22,6 +22,10 @@ log = logging.getLogger("bridge43")
 async def lifespan(app: FastAPI):
     db.init_db()
     seed_demo_if_empty()
+    from . import workflow
+    changed = workflow.refresh_all_cases()
+    if changed:
+        log.info("%d case(s) brought up to date (resolved when every need is confirmed)", changed)
     requeued = pipeline.process_pending()
     if requeued:
         log.info("re-queued %d unfinished items", requeued)

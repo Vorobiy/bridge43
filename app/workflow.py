@@ -442,7 +442,16 @@ def set_status(ticket_id: int, status: str, who: str, note: str | None = None) -
         db.add_event(ticket_id, "status", "Every need of this school is confirmed: case resolved.", who)
 
 
-def refresh_case(thread_id: int, who: str = "staff") -> str | None:
+def refresh_all_cases() -> int:
+    """At startup: resolve cases whose needs were all confirmed before case resolution existed (or by a script)."""
+    n = 0
+    for t in db.list_threads("approved") + db.list_threads("resolved"):
+        if refresh_case(t["id"], backfill=True):
+            n += 1
+    return n
+
+
+def refresh_case(thread_id: int, who: str = "staff", backfill: bool = False) -> str | None:
     """Keep the case in step with its needs: once every need is confirmed by the school (or cancelled, with at
     least one confirmed), the case is resolved and counted on Impact. If a need reopens, the case is active again."""
     thread = db.get_thread(thread_id)
@@ -452,7 +461,8 @@ def refresh_case(thread_id: int, who: str = "staff") -> str | None:
     live = [k for k in tickets if k["status"] != "cancelled"]
     done = bool(live) and all(k["status"] == "checked" for k in live)
     if done and thread["status"] == "approved":
-        db.set_thread(thread_id, status="resolved", resolved_at=db.now())
+        when = db.now() if not backfill else max((k.get("delivered_at") or "" for k in live), default="") or db.now()
+        db.set_thread(thread_id, status="resolved", resolved_at=when)
         return "resolved"
     if not done and thread["status"] == "resolved":
         db.set_thread(thread_id, status="approved", resolved_at=None)
