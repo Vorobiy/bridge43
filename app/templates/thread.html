@@ -11,7 +11,22 @@
 .case-head .sub { color: var(--muted); font-size: 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .status-chip { font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--line); color: var(--ink); }
 .status-chip.s-draft_ready { background: var(--yellow); color: #111; } .status-chip.s-approved { background: var(--green); color: #fff; }
-.status-chip.s-open { background: var(--info-soft); }
+.status-chip.s-open { background: var(--info-soft); } .status-chip.s-resolved { background: var(--navy); color: #fff; }
+/* needs with progress (the case's work) */
+.work { list-style: none; padding: 0; margin: 0; }
+.work li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.work li:first-child { border-top: 0; }
+.work .t { font-weight: 700; } .work .s { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.work .prog { display: inline-block; width: 80px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; vertical-align: middle; margin-right: 6px; }
+.work .prog i { display: block; height: 100%; background: var(--green); }
+.work .st { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--info-soft); }
+.work .st.checked { background: var(--green); color: #fff; } .work .st.delivered { background: var(--yellow); color: #111; }
+.work .st.cancelled { background: var(--line); color: var(--muted); }
+.history { list-style: none; padding: 0; margin: 0; font-size: 13.5px; }
+.history li { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; padding: 5px 0; border-top: 1px solid var(--line); }
+.history li:first-child { border-top: 0; }
+.history .when { color: var(--muted); font-size: 12.5px; }
+.history .k-resolved, .history .k-approved { font-weight: 700; color: var(--accent); }
 .case-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .case-actions details { position: relative; }
 .case-actions details > summary { list-style: none; margin: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-weight: 600; }
@@ -78,7 +93,7 @@
 {% endblock %}
 {% block body %}
 {% set d = summary.data if summary else {} %}
-{% set STATUS = {"open":"Collecting","draft_ready":"Ready to review","approved":"Approved","closed":"Closed","rejected":"Rejected","not_relevant":"Not relevant"} %}
+{% set STATUS = {"open":"Collecting","draft_ready":"Ready to review","approved":"In progress","resolved":"Resolved","closed":"Closed","rejected":"Rejected","not_relevant":"Not relevant"} %}
 {% set first_name = (contact.display_name or "the contact").split("(")[0].strip() %}
 <p class="small" style="margin:0 0 6px"><a href="/">← Inbox</a></p>
 
@@ -171,7 +186,36 @@
   {{ ui.next_step(next) }}
   {% endif %}
 
-  {% if priority %}
+  {% if case_needs %}
+  {% set n_done = case_needs|selectattr("ticket.status", "equalto", "checked")|list|length %}
+  {% set n_live = case_needs|rejectattr("ticket.status", "equalto", "cancelled")|list|length %}
+  <div class="panel" style="margin-bottom:16px" id="work">
+    <h2 style="margin-top:0; display:flex; justify-content:space-between; align-items:baseline">Needs
+      <span class="small muted">{{ n_done }} of {{ n_live }} confirmed by the school</span></h2>
+    <ul class="work">
+    {% for r in case_needs %}{% set k = r.ticket %}
+      <li>
+        <div>
+          <div class="t"><a href="/tickets/{{ k.id }}" style="color:inherit; text-decoration:none">{{ category_labels.get(k.category, k.category)|capitalize }}{% if k.quantity_text %} · {{ k.quantity_text }}{% endif %}</a>
+            <span class="st {{ k.status }}">{{ status_labels[k.status] }}</span></div>
+          <div class="s">{% if r.total %}<span class="prog"><i style="width:{{ (100 * r.done / r.total)|round|int }}%"></i></span>{{ r.done }}/{{ r.total }} steps{% endif %}
+            {% if r.partners %} · {{ r.partners|join(", ") }}{% endif %}
+            {% if r.next and r.next.label and k.status not in ("new",) %} · next: {{ r.next.label }}{% endif %}</div>
+        </div>
+        <div>
+          {% if r.next and r.next.action and k.status != "new" %}
+            <form method="post" action="{{ r.next.action }}"><input type="hidden" name="back" value="/threads/{{ thread.id }}">
+              {% for kk, vv in (r.next.fields or {}).items() %}<input type="hidden" name="{{ kk }}" value="{{ vv }}">{% endfor %}
+              <button class="primary" type="submit">{{ r.next.button or "Done" }}</button></form>
+          {% else %}<a class="btn" href="/tickets/{{ k.id }}{{ r.next.href if r.next and r.next.href and r.next.href.startswith('#') else '' }}">{{ "Open" if k.status not in ("new",) else "Find partner" }}</a>{% endif %}
+        </div>
+      </li>
+    {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if priority and thread.status != "resolved" %}
   <div class="panel priority q-{{ priority.quadrant }}" style="margin-bottom:16px">
     <span class="badge" style="background:var(--q); color:var(--qt); font-size:13px">{{ priority.quadrant_label }}</span>
     <span class="small muted">need {{ priority.need }} · ready {{ priority.readiness }}{% if priority.provisional %} · from the draft{% endif %}</span>
@@ -218,7 +262,7 @@
     {% if d.donor.conditions %}<p class="small"><strong>Conditions:</strong> {{ d.donor.conditions }}</p>{% endif %}
     {% endif %}
 
-    {% if d.needs %}
+    {% if d.needs and not case_needs %}
     <h3>Needs</h3>
     <ul class="needs-list">
     {% for n in d.needs %}<li><span class="n-what"><strong>{{ category_labels.get(n.category, n.category.replace("_", " "))|capitalize }}</strong>: {{ n.description }} {{ cites(n.citations) }}</span>
@@ -308,9 +352,7 @@
   {% elif summary.status == "rejected" %}
   <div class="flash err" style="margin-top:16px">Rejected by {{ summary.reviewer }}.{% if summary.review_notes %} {{ summary.review_notes }}{% endif %}</div>
   {% else %}
-  <p class="small muted" style="margin:10px 2px 0">Approved by {{ summary.reviewer }}, {{ summary.reviewed_at|ago }}.{% if summary.review_notes %} “{{ summary.review_notes }}”{% endif %}
-    {% if case_tickets %}Needs: {% for k in case_tickets %}<a href="/tickets/{{ k.id }}">{{ category_labels.get(k.category, k.category) }}</a> ({{ k.status.replace("_", " ") }}){% if not loop.last %} · {% endif %}{% endfor %}{% endif %}
-    {% if partner %}Partner record: <a href="/partners/{{ partner.id }}">{{ partner.name }}</a>{% endif %}</p>
+  {% if partner %}<p class="small" style="margin:10px 2px 0">Partner record: <a href="/partners/{{ partner.id }}">{{ partner.name }}</a> · approved by {{ summary.reviewer }} {{ summary.reviewed_at|ago }}</p>{% endif %}
   {% endif %}
 
   {# ---- one place to message the contact: ask what's missing, or confirm the summary ---- #}
@@ -318,8 +360,8 @@
   {% set ask = d._follow_up.message if d._follow_up else "" %}
   {% set confirm_text = d.confirmation_message.text if d.confirmation_message else "" %}
   {% if ask or confirm_text %}
-  <div class="panel" style="margin-top:16px" id="message">
-    <h2 style="margin-top:0">{{ ui.icon("message") }} Message {{ first_name }}</h2>
+  <details class="panel" style="margin-top:16px; padding-top:10px" id="message" {% if thread.status != "resolved" %}open{% endif %}>
+    <summary style="margin:0"><h2 style="margin:0; display:inline">{{ ui.icon("message") }} Message {{ first_name }}</h2></summary>
     <div class="msg-tabs" role="tablist">
       {% if ask %}<button type="button" class="on" data-pane="ask">Ask for missing information</button>{% endif %}
       {% if confirm_text %}<button type="button" class="{{ '' if ask else 'on' }}" data-pane="confirm">Confirm the summary{% if summary.confirmation_sent_at %} ✓{% endif %}</button>{% endif %}
@@ -344,9 +386,19 @@
     </form>
     {% endif %}
     {% endfor %}
-  </div>
+  </details>
   {% endif %}
   {% endif %}
+  {% endif %}
+
+  {% if history|length > 1 %}
+  <details class="more-box" {% if thread.status in ("approved", "resolved") %}open{% endif %}>
+    <summary>History</summary>
+    <ul class="history">
+    {% for e in history %}{% if loop.index == 9 %}</ul><details><summary class="small">Show {{ history|length - 8 }} older</summary><ul class="history">{% endif %}<li><span class="when" title="{{ e.at }}">{{ e.at|ago }}</span>
+      <span class="k-{{ e.kind }}">{% if e.ticket %}<a href="/tickets/{{ e.ticket }}" style="color:inherit; text-decoration:none">{{ e.text|truncate(110) }}</a>{% else %}{{ e.text }}{% endif %}{% if e.who and e.who not in ("AI",) %} <span class="muted">· {{ e.who }}</span>{% endif %}</span></li>{% endfor %}
+    </ul>{% if history|length > 8 %}</details>{% endif %}
+  </details>
   {% endif %}
 </section>
 

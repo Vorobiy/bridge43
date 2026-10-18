@@ -104,7 +104,7 @@ def dashboard(request: Request, region: str = "", msg: str | None = None, error:
         "match_rate": round(100 * matched / len(coverage["rows"])) if coverage["rows"] else None,
         "in_progress": sum(1 for k in tickets if k["status"] in ("matched", "in_progress")),
         "delivered": sum(1 for k in tickets if k["status"] in ("delivered", "checked")),
-        "partners": len(db.list_donors()),
+        "partners": len(db.list_donors()), "helped": len(db.list_threads("resolved")),
     }
     return _render(request, "dashboard.html", view=view, kpis=kpis, regions=regions, region=region,
                    plot=_plot(view["cases"]), W=W, H=H, L=L, B=B, geo=geo.map_view(view["cases"]),
@@ -122,7 +122,7 @@ def api_matrix():
 # ------------------------------------------------------------------ tickets
 
 @router.get("/tickets", response_class=HTMLResponse)
-def tickets_board(request: Request, msg: str | None = None):
+def tickets_board(request: Request, msg: str | None = None, error: str | None = None):
     coverage = {r["ticket"]["id"]: r["plan"]["type"] for r in workflow.coverage_view()["rows"]}
     links = db.list_links()
     cols = {s: [] for s in workflow.STATUSES if s != "cancelled"}
@@ -134,9 +134,15 @@ def tickets_board(request: Request, msg: str | None = None):
             k["plan_type"] = coverage.get(k["id"])
             cols[k["status"]].append(k)
     urgency = {"critical": 0, "high": 1, "medium": 2, "low": 3, "unknown": 4}
-    for v in cols.values():
-        v.sort(key=lambda k: (urgency.get(k["urgency"], 5), k["id"]))
-    return _render(request, "tickets.html", cols=cols, msg=msg)
+    ready_first = {"single": 0, "combined": 0, "partial": 1, "related": 2, "none": 3}
+    for status, v in cols.items():
+        if status == "new":  # the ones a partner can cover right away first
+            v.sort(key=lambda k: (ready_first.get(k.get("plan_type"), 4), urgency.get(k["urgency"], 5), k["id"]))
+        elif status == "checked":  # newest confirmations first
+            v.sort(key=lambda k: k.get("delivered_at") or "", reverse=True)
+        else:
+            v.sort(key=lambda k: (urgency.get(k["urgency"], 5), k["id"]))
+    return _render(request, "tickets.html", cols=cols, msg=msg, error=error)
 
 
 def _ticket_or_404(ticket_id: int) -> dict:
@@ -163,22 +169,28 @@ def ticket_page(request: Request, ticket_id: int, msg: str | None = None, error:
         partner_default=first["id"] if first else None, school_text=workflow.school_update_message(t),
         partner_texts={d["id"]: workflow.partner_message(t, d) for d in donors if d.get("contact_id")},
         statuses=workflow.STATUSES, msg=msg, error=error, stage=workflow.TICKET_STAGE.get(t["status"]),
+        phones={c: db.phone_of((db.get_contact(c) or {}).get("reply_to") or (db.get_contact(c) or {}).get("address"))
+                for c in {d["contact_id"] for d in donors if d.get("contact_id")} | {t["contact_id"]}},
         next=workflow.ticket_next_step(t, m["plan"], db.list_steps(ticket_id)))
 
 
 @router.post("/tickets/{ticket_id}/status")
-def ticket_status(ticket_id: int, status: str = Form(...), who: str = Depends(staff)):
-    _ticket_or_404(ticket_id)
+def ticket_status(ticket_id: int, status: str = Form(...), back: str = Form(""), who: str = Depends(staff)):
+    t = _ticket_or_404(ticket_id)
+    before = (db.get_thread(t["thread_id"]) or {}).get("status")
     workflow.set_status(ticket_id, status, who)
-    return _go(f"/tickets/{ticket_id}", msg=f"Status set to {workflow.STATUS_LABELS.get(status, status)}.")
+    return _go(_safe_back(back, f"/tickets/{ticket_id}"),
+               msg=_outcome_msg(ticket_id, before) or f"Status set to {workflow.STATUS_LABELS.get(status, status)}.")
 
 
 @router.post("/tickets/{ticket_id}/assign")
 def ticket_assign(ticket_id: int, donor_id: int = Form(...), item_id: str = Form(""), quantity: str = Form(""),
-                  who: str = Depends(staff)):
-    _ticket_or_404(ticket_id)
+                  back: str = Form(""), who: str = Depends(staff)):
+    t = _ticket_or_404(ticket_id)
     workflow.assign(ticket_id, donor_id, int(item_id) if item_id.strip() else None, _num(quantity), who)
-    return _go(f"/tickets/{ticket_id}", msg="Partner added to this need.")
+    donor = db.get_donor(donor_id) or {}
+    return _go(_safe_back(back, f"/tickets/{ticket_id}"),
+               msg=f"{donor.get('name', 'Partner')} assigned to {t['description']}. It moved to 'Partner found' on Needs.")
 
 
 @router.post("/tickets/{ticket_id}/assign-plan")
@@ -188,7 +200,7 @@ def ticket_assign_plan(ticket_id: int, back: str = Form(""), who: str = Depends(
     for p in plan["picks"]:
         workflow.assign(ticket_id, p["donor_id"], p["item_id"], p["covers"], who)
     msg = f"Added {len(plan['picks'])} partner(s) to “{t['description']}”. Next: message them from the ticket."
-    return _go(back if back.startswith("/") else f"/tickets/{ticket_id}", msg=msg)
+    return _go(_safe_back(back, f"/tickets/{ticket_id}"), msg=msg)
 
 
 @router.post("/tickets/{ticket_id}/links/{link_id}/cancel")
@@ -197,10 +209,29 @@ def ticket_cancel_link(ticket_id: int, link_id: int, who: str = Depends(staff)):
     return _go(f"/tickets/{ticket_id}", msg="Commitment cancelled.")
 
 
+def _safe_back(back: str, default: str) -> str:
+    return back if back.startswith("/") and not back.startswith("//") else default
+
+
+def _outcome_msg(ticket_id: int, before_case: str | None) -> str | None:
+    """Tell staff what their click changed elsewhere (case resolved, need delivered...)."""
+    t = db.get_ticket(ticket_id)
+    case = db.get_thread(t["thread_id"]) if t else None
+    if case and case["status"] == "resolved" and before_case != "resolved":
+        return f"School confirmed. {case['case_number']} is resolved and now counts on Impact."
+    if t and t["status"] == "checked":
+        return "School confirmed this need. Follow-ups are scheduled on Today."
+    if t and t["status"] == "delivered":
+        return "Marked delivered. Next: get the school to confirm, with photos."
+    return None
+
+
 @router.post("/tickets/{ticket_id}/steps/{step_id}/done")
-def ticket_step_done(ticket_id: int, step_id: int, who: str = Depends(staff)):
+def ticket_step_done(ticket_id: int, step_id: int, back: str = Form(""), who: str = Depends(staff)):
+    t = _ticket_or_404(ticket_id)
+    before = (db.get_thread(t["thread_id"]) or {}).get("status")
     workflow.step_done(ticket_id, step_id, who)
-    return _go(f"/tickets/{ticket_id}")
+    return _go(_safe_back(back, f"/tickets/{ticket_id}"), msg=_outcome_msg(ticket_id, before) or "Step done.")
 
 
 @router.post("/tickets/{ticket_id}/steps")
@@ -407,6 +438,10 @@ def api_impact():
     v = workflow.impact_view()
     v["stories"] = [{"school": s["school"], "need": s["ticket"]["description"], "partners": s["partners"],
                      "pupils": s["pupils"], "delivered_at": s["ticket"]["delivered_at"]} for s in v["stories"]]
+    v["resolved"] = [{"case_number": r["thread"]["case_number"], "school": r["school"], "region": r["region"],
+                      "pupils": r["pupils"], "delivered": r["delivered"], "partners": r["partners"],
+                      "days": r["days"], "resolved_at": r["resolved_at"]} for r in v["resolved"]]
+    v["awaiting"] = [{"school": a["school"], "need": a["ticket"]["description"]} for a in v["awaiting"]]
     return JSONResponse(v)
 
 

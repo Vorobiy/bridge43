@@ -36,7 +36,7 @@
     <option value="">All regions</option>{% for r in regions %}<option {% if r == region %}selected{% endif %}>{{ r }}</option>{% endfor %}
   </select></form>
 </div>
-<p class="muted small" style="margin-top:0">Need = what is missing × how many children. Ready = can the school receive and look after help. Updates as soon as a school sends new information.</p>
+<p class="muted small" style="margin-top:0">Need = what is missing × pupils. Ready = can the school receive help. Updates with every new message.{% if kpis.helped %} · <a href="/impact">{{ kpis.helped }} school{{ "" if kpis.helped == 1 else "s" }} already helped →</a>{% endif %}</p>
 
 <div class="kpis">
   <div><strong>{{ kpis.schools }}</strong><span>schools ranked</span></div>
@@ -88,13 +88,12 @@
       <a class="title" href="/threads/{{ c.thread.id }}">{{ c.score.name }}</a>
       {% if c.pending == "new" %}<span class="badge b-draft_ready" title="Scored from the AI draft: approve it to open needs">not reviewed yet</span>
       {% elif c.pending == "update" %}<span class="badge b-draft_ready" title="New messages changed the draft since it was approved">updated · check it</span>{% endif %}
-      <div class="small muted">{{ [c.score.town, c.score.region]|select|join(", ") or "place not known" }} · {{ c.thread.case_number }}</div>
+      <div class="small muted">{{ [c.score.town, c.score.region]|select|join(", ") or "place not known" }}{% if c.score.students %} · {{ c.score.students }} pupils{% endif %}</div>
       <div class="scores"><span>need</span> {{ ui.meter(c.score.need, "need") }} <span>ready</span> {{ ui.meter(c.score.readiness, "readiness") }}</div>
       {% if c.score.gaps %}<div class="small">{{ c.score.gaps[:2]|join(" · ")|capitalize }}</div>{% endif %}
-      {% if c.score.vulnerable %}<div class="small" style="color:var(--red)">At risk: {{ c.score.vulnerable[:2]|join(", ") }}</div>{% endif %}
-      {% if q == "prepare_first" and c.score.not_ready %}<div class="small" style="color:var(--warn)">Prepare: {{ c.score.not_ready[:3]|join(", ") }}</div>{% endif %}
+      {% if q == "prepare_first" and c.score.not_ready %}<div class="small" style="color:var(--warn)">Prepare: {{ c.score.not_ready[:3]|join(", ") }}</div>
+      {% elif c.score.vulnerable %}<div class="small" style="color:var(--red)">At risk: {{ c.score.vulnerable[:1]|join(", ") }}</div>{% endif %}
       <details class="small why"><summary style="margin:4px 0 0">Why?</summary>{{ c.score.why }}</details>
-      {% if c.helped %}<div class="small" style="color:var(--accent)">Already helped: {{ c.helped|join(", ") }}</div>{% endif %}
       {% for k in c.tickets if k.status not in ("checked", "cancelled") %}
         <a class="pill" href="/tickets/{{ k.id }}">{{ category_labels.get(k.category, k.category) }} · {{ status_labels[k.status] }}</a>
       {% endfor %}

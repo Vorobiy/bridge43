@@ -108,7 +108,7 @@ def inbox(request: Request, status: str | None = None, q: str = ""):
             str(t.get(k) or "") for k in ("case_number", "display_name", "address", "title")).lower()]
     everything = db.list_threads()
     counts = {s: sum(1 for t in everything if t["status"] == s)
-              for s in ("open", "draft_ready", "approved", "closed", "rejected", "not_relevant")}
+              for s in ("open", "draft_ready", "approved", "resolved", "closed", "rejected", "not_relevant")}
     from . import gaps
     for t in threads:
         s = db.latest_summary(t["id"])
@@ -189,6 +189,8 @@ def thread_page(request: Request, thread_id: int, msg: str | None = None, error:
         stage=workflow.case_stage(thread, case_tickets) if not partner else None,
         next=workflow.case_next_step(thread, summary, case_tickets, partner),
         matches=workflow.case_matches(thread_id) if case_tickets and not partner else [],
+        case_needs=workflow.case_needs(thread_id) if case_tickets else [], history=workflow.case_history(thread_id),
+        status_labels=workflow.STATUS_LABELS,
         category_labels=matching.CATEGORY_LABELS,
         phone=db.phone_of(contact.get("reply_to") or contact["address"])))
 
@@ -281,6 +283,7 @@ def approve(summary_id: int, notes: str = Form(""), who: str = Depends(staff)):
     db.set_thread(s["thread_id"], status="approved", stale_summary=0)
     from . import workflow
     made = workflow.on_case_approved(s["thread_id"], who)
+    workflow.refresh_case(s["thread_id"], who)
     extra = ""
     if made.get("tickets"):
         extra = f" {len(made['tickets'])} new ticket(s) opened for its needs."
@@ -359,6 +362,8 @@ def set_relevance(thread_id: int, relevant: str = Form(...)):
         s = db.latest_summary(thread_id)
         status = "approved" if s and s["status"] == "approved" else ("draft_ready" if s else "open")
         db.set_thread(thread_id, status=status, relevance_locked=1)
+        from . import workflow
+        workflow.refresh_case(thread_id)
         return _back(thread_id, msg=f"{t['case_number']} is a case again and stays in the inbox.")
     db.set_thread(thread_id, status="not_relevant", relevance_locked=1)
     return _back(thread_id, msg=f"{t['case_number']} moved to Not relevant.")
@@ -377,6 +382,8 @@ def reopen_case(thread_id: int):
     s = db.latest_summary(thread_id)
     db.set_thread(thread_id, status="approved" if s and s["status"] == "approved" else
                   ("draft_ready" if s and s["status"] == "draft" else "open"))
+    from . import workflow
+    workflow.refresh_case(thread_id)
     return _back(thread_id, msg=f"Case {t['case_number']} reopened.")
 
 

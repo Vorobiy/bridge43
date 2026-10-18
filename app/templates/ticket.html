@@ -1,8 +1,21 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
-{% block title %}{{ t.description }}{% endblock %}
+{% block title %}{{ t.description }}<script>
+(function () {
+  const sel = document.getElementById("to"), box = document.getElementById("mt"), wa = document.getElementById("wa"), sms = document.getElementById("smsl");
+  if (!sel) return;
+  function sync() {
+    const o = sel.selectedOptions[0], phone = (o.dataset.phone || "").replace(/[^0-9+]/g, ""), t = encodeURIComponent(box.value);
+    wa.style.display = sms.style.display = phone ? "" : "none";
+    wa.href = "https://wa.me/" + phone.replace("+", "") + "?text=" + t; sms.href = "sms:" + phone + "?&body=" + t;
+  }
+  sel.addEventListener("change", () => { const o = sel.selectedOptions[0]; if (o.dataset.text) box.value = o.dataset.text; sync(); });
+  box.addEventListener("input", sync); sync();
+})();
+</script>
+{% endblock %}
 {% block body %}
-<p class="small"><a href="/tickets">← Needs</a> · <a href="/dashboard">Schools</a></p>
+<p class="small" style="margin:0 0 6px"><a href="/threads/{{ t.thread_id }}">← {{ score.name if score else (t.display_name or t.case_title) }}</a> · <a href="/tickets">All needs</a></p>
 {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
 {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
 {{ ui.journey(stage) }}
@@ -16,9 +29,9 @@
       <h1 style="margin:8px 0 4px">{{ t.description }}{% if t.quantity_text %} <span class="muted">· {{ t.quantity_text }}</span>{% endif %}</h1>
       <p class="muted" style="margin:0">For <a href="/threads/{{ t.thread_id }}">{{ score.name if score else (t.display_name or t.case_title) }}</a>
         {% if score %}· {{ [score.town, score.region]|select|join(", ") }}{% if score.students %} · {{ score.students }} pupils{% endif %}
-        · <span class="badge q-{{ score.quadrant }}" style="background:var(--q); color:var(--qt)">{{ score.quadrant_label }}</span>{% endif %}
+        {% if t.status not in ("checked", "cancelled") %}· <span class="badge q-{{ score.quadrant }}" style="background:var(--q); color:var(--qt)">{{ score.quadrant_label }}</span>{% endif %}{% endif %}
         · {{ t.case_number }}</p>
-      {% if score %}<p class="small" style="margin:6px 0 0">{{ score.why }}</p>{% endif %}
+
     </div>
     <details style="flex:0 0 220px"><summary class="small muted">Change status by hand</summary>
     <form method="post" action="/tickets/{{ t.id }}/status" class="row" style="align-items:flex-end">
@@ -81,7 +94,7 @@
   <!-- quotes -->
   <details class="more-box" style="overflow-x:auto" {% if quotes %}open{% endif %}>
     <summary>Quotes and price check ({{ quotes|length }})</summary>
-    <p class="small muted">Every price is compared with other quotes for the same thing (any school). More than 25% above is flagged, so prices are not inflated.</p>
+    <p class="small muted">Prices more than 25% above other quotes for the same thing are flagged.</p>
     {% if quotes %}
     <table><thead><tr><th>From</th><th>Total (FCFA)</th><th>Per unit</th><th>Check</th><th></th></tr></thead><tbody>
     {% for q in quotes %}<tr>
@@ -113,7 +126,9 @@
 <div>
   <!-- steps -->
   <div class="panel">
-    <h2 style="margin-top:0">{{ ui.icon("deliver") }} Deployment steps</h2>
+    {% set n_done = steps|selectattr("done_at")|list|length %}
+    <h2 style="margin-top:0; display:flex; justify-content:space-between"><span>{{ ui.icon("deliver") }} Steps</span> <span class="small muted">{{ n_done }} of {{ steps|length }} done</span></h2>
+    {% if steps and n_done == steps|length %}<details><summary class="small">All done: show the steps</summary>{% endif %}
     {% set ns = namespace(current=None) %}
     {% for s in steps %}{% if not s.done_at and ns.current is none %}{% set ns.current = s.id %}{% endif %}{% endfor %}
     <ol class="stepper">
@@ -121,51 +136,71 @@
       <li class="{{ 'done' if s.done_at else ('now' if s.id == ns.current else 'later') }}">
         <span class="dot">{% if s.done_at %}{{ ui.icon("yes", 14) }}{% else %}{{ loop.index }}{% endif %}</span>
         <span class="what">{{ s.title }}
-          <span class="small muted">{% if s.done_at %}done {{ s.done_at[:10] }} by {{ s.done_by }}{% else %}{{ {"ps43": "PS43", "partner": "partner", "school": "school"}.get(s.owner, s.owner) }}{% if s.due %} · due {{ s.due }}{% endif %}{% endif %}</span></span>
+          <span class="small muted">{% if s.done_at %}{{ s.done_at|ago }}{% if s.done_by %} · {{ s.done_by }}{% endif %}{% else %}{{ {"ps43": "PS43", "partner": "partner", "school": "school"}.get(s.owner, s.owner) }}{% if s.due %} · due {{ s.due }}{% endif %}{% endif %}</span></span>
         {% if not s.done_at %}<form class="inline" method="post" action="/tickets/{{ t.id }}/steps/{{ s.id }}/done">
           <button type="submit" {% if s.id == ns.current %}class="primary"{% endif %}>Done</button></form>{% endif %}
       </li>
     {% endfor %}
     </ol>
-    <p class="small muted">The need becomes Delivered when the work steps are done, and Confirmed when the school confirms. Only a school confirmation raises the partner's trust.</p>
-    <details><summary>Add a step</summary>
+    {% if steps and n_done == steps|length %}</details>{% endif %}
+    {% if t.status not in ("checked", "cancelled") %}<details><summary>Add a step</summary>
       <form method="post" action="/tickets/{{ t.id }}/steps" class="row" style="align-items:flex-end">
         <div style="flex:3"><label>Step</label><input type="text" name="title" required></div>
         <div><label>Who</label><select name="owner"><option>ps43</option><option>partner</option><option>school</option></select></div>
         <div><label>Due</label><input type="text" name="due" placeholder="2026-11-15"></div>
         <div style="flex:0 0 auto"><button type="submit">Add</button></div>
       </form>
-    </details>
+    </details>{% endif %}
   </div>
 
   <!-- messages -->
-  <div class="panel" style="margin-top:16px">
-    <h2 style="margin-top:0" id="message">{{ ui.icon("message") }} Message</h2>
-    <form method="post" action="/tickets/{{ t.id }}/message">
-      <label for="to">To</label>
-      <select id="to" name="to" onchange="var o=this.selectedOptions[0]; if(o.dataset.text) document.getElementById('mt').value=o.dataset.text;">
-        {% for d in donors if d.contact_id %}<option value="{{ d.id }}" data-text="{{ partner_texts[d.id] }}" {% if d.id == partner_default %}selected{% endif %}>Partner: {{ d.name }}</option>{% endfor %}
-        <option value="school" data-text="{{ school_text }}" {% if not partner_default %}selected{% endif %}>School: {{ t.display_name or t.case_title }}</option>
+  <details class="panel" style="margin-top:16px" id="message" {% if t.status not in ("checked", "cancelled") %}open{% endif %}>
+    <summary style="margin:0"><h2 style="margin:0; display:inline">{{ ui.icon("message") }} Message</h2></summary>
+    <form method="post" action="/tickets/{{ t.id }}/message" id="msgform">
+      <select id="to" name="to" aria-label="To">
+        {% for d in donors if d.contact_id %}<option value="{{ d.id }}" data-text="{{ partner_texts[d.id] }}" data-phone="{{ phones.get(d.contact_id) or '' }}" {% if d.id == partner_default %}selected{% endif %}>To partner: {{ d.name }}</option>{% endfor %}
+        <option value="school" data-text="{{ school_text }}" data-phone="{{ phones.get(t.contact_id) or '' }}" {% if not partner_default %}selected{% endif %}>To school: {{ t.display_name or t.case_title }}</option>
       </select>
-      <textarea id="mt" name="text" rows="5">{{ partner_text if partner_default else school_text }}</textarea>
-      <label class="check"><input type="checkbox" name="manual" value="1"> I sent it from my phone (just log it)</label>
-      <p><button class="primary" type="submit">Send and log</button></p>
+      <textarea id="mt" name="text" rows="5" style="margin-top:8px">{{ partner_text if partner_default else school_text }}</textarea>
+      <div class="actions" style="margin-top:8px">
+        {% if settings.twilio_enabled %}<button class="primary" type="submit">Send now</button>{% endif %}
+        <a class="btn {{ '' if settings.twilio_enabled else 'primary' }}" id="wa" href="#" target="_blank" rel="noopener">Open in WhatsApp</a>
+        <a class="btn" id="smsl" href="#">Open in SMS</a>
+        <span style="flex:1"></span>
+        <button type="submit" name="manual" value="1">I sent it ✓</button>
+      </div>
     </form>
     <form method="post" action="/tickets/{{ t.id }}/note" class="row" style="align-items:flex-end">
-      <div style="flex:3"><label>Add a note (call, visit, decision)</label><input type="text" name="text"></div>
+      <div style="flex:3"><input type="text" name="text" placeholder="Add a note: call, visit, decision…" aria-label="Note"></div>
       <div style="flex:0 0 auto"><button type="submit">Add note</button></div>
     </form>
-  </div>
+  </details>
 
   <!-- activity -->
   <div class="panel" style="margin-top:16px">
-    <h2 style="margin-top:0">Activity and messages</h2>
+    <h2 style="margin-top:0">Activity</h2>
+    {% set evs = events|reverse|list %}
     <ul class="log">
-    {% for e in events|reverse %}<li><span class="when">{{ e.at[:16].replace("T", " ") }} · {{ e.who or "" }} · {{ e.kind }}</span><br>{{ e.text }}</li>
+    {% for e in evs[:6] %}<li><span class="when">{{ e.at|ago }}{% if e.who %} · {{ e.who }}{% endif %}</span><br>{{ e.text|truncate(160) }}</li>
     {% else %}<li class="muted">Nothing yet.</li>{% endfor %}
     </ul>
+    {% if evs|length > 6 %}<details><summary class="small">{{ evs|length - 6 }} older</summary><ul class="log">
+    {% for e in evs[6:] %}<li><span class="when">{{ e.at|ago }}{% if e.who %} · {{ e.who }}{% endif %}</span><br>{{ e.text|truncate(160) }}</li>{% endfor %}</ul></details>{% endif %}
     {% if followups %}<h3>Follow-ups</h3><ul>{% for f in followups %}<li>{{ f.days }} days: due {{ f.due_on }}{% if f.sent_at %} · sent {{ f.sent_at[:10] }}{% endif %}</li>{% endfor %}</ul>{% endif %}
   </div>
 </div>
 </div>
+<script>
+(function () {
+  const sel = document.getElementById("to"), box = document.getElementById("mt"), wa = document.getElementById("wa"), sms = document.getElementById("smsl");
+  if (!sel) return;
+  function sync() {
+    const o = sel.selectedOptions[0], phone = (o.dataset.phone || "").replace(/[^0-9+]/g, ""), t = encodeURIComponent(box.value);
+    wa.style.display = sms.style.display = phone ? "" : "none";
+    wa.href = "https://wa.me/" + phone.replace("+", "") + "?text=" + t; sms.href = "sms:" + phone + "?&body=" + t;
+  }
+  sel.addEventListener("change", () => { const o = sel.selectedOptions[0]; if (o.dataset.text) box.value = o.dataset.text; sync(); });
+  box.addEventListener("input", sync); sync();
+})();
+</script>
 {% endblock %}

@@ -23,7 +23,7 @@
 .conv:hover { border-color: var(--green); }
 .conv .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
 .conv.s-draft_ready .dot { background: var(--yellow); } .conv.s-open .dot { background: #5b8def; }
-.conv.s-approved .dot { background: var(--green); } .conv.s-closed .dot, .conv.s-rejected .dot { background: var(--muted); }
+.conv.s-approved .dot { background: var(--green); } .conv.s-resolved .dot { background: var(--navy); box-shadow: 0 0 0 2px var(--green); } .conv.s-closed .dot, .conv.s-rejected .dot { background: var(--muted); }
 .conv .who { font-weight: 700; font-size: 17px; line-height: 1.25; }
 .conv .what { color: var(--ink); opacity: .85; font-size: 15px; margin-top: 1px; }
 .conv .meta { color: var(--muted); font-size: 13px; margin-top: 3px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
@@ -38,7 +38,7 @@
 </style>
 {% endblock %}
 {% block body %}
-{% set LABEL = {"open": "Collecting", "draft_ready": "Ready to review", "approved": "Approved", "closed": "Closed", "rejected": "Rejected", "not_relevant": "Not relevant"} %}
+{% set LABEL = {"open": "Collecting", "draft_ready": "Ready to review", "approved": "In progress", "resolved": "Resolved", "closed": "Closed", "rejected": "Rejected", "not_relevant": "Not relevant"} %}
 {% macro row(t) %}
 {% set name, need = (t.title|split_title) %}
 <a class="conv s-{{ t.status }}" href="/threads/{{ t.id }}">
@@ -76,7 +76,8 @@
   <a class="chip {{ 'on' if not status }}" href="/">All</a>
   <a class="chip hot {{ 'on' if status == 'draft_ready' }}" href="/?status=draft_ready">To review <b>{{ counts.draft_ready }}</b></a>
   <a class="chip {{ 'on' if status == 'open' }}" href="/?status=open">Collecting <b>{{ counts.open }}</b></a>
-  <a class="chip {{ 'on' if status == 'approved' }}" href="/?status=approved">Approved <b>{{ counts.approved }}</b></a>
+  <a class="chip {{ 'on' if status == 'approved' }}" href="/?status=approved">In progress <b>{{ counts.approved }}</b></a>
+  <a class="chip {{ 'on' if status == 'resolved' }}" href="/?status=resolved">Resolved <b>{{ counts.resolved }}</b></a>
   <span class="more-filters">Also: <a href="/?status=closed">closed ({{ counts.closed }})</a> · <a href="/?status=rejected">rejected ({{ counts.rejected }})</a> · <a href="/?status=not_relevant">not relevant ({{ counts.not_relevant }})</a></span>
 </div>
 
@@ -85,7 +86,7 @@
 {% elif status or q %}
   <div class="list">{% for t in threads %}{{ row(t) }}{% endfor %}</div>
 {% else %}
-  {% set review = threads|selectattr("status", "equalto", "draft_ready")|list + threads|selectattr("status", "equalto", "approved")|selectattr("stale_summary")|list %}
+  {% set review = threads|selectattr("status", "equalto", "draft_ready")|list + threads|selectattr("status", "in", ["approved", "resolved"])|selectattr("stale_summary")|list %}
   {% set review_ids = review|map(attribute="id")|list %}
   {% set collecting = threads|selectattr("status", "equalto", "open")|list %}
   {% set rest = threads|rejectattr("id", "in", review_ids)|rejectattr("status", "equalto", "open")|list %}

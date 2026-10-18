@@ -215,7 +215,7 @@ def school_names() -> dict[int, str]:
 
 
 def matrix_view() -> dict:
-    cases = approved_cases(include_drafts=True)
+    cases = [c for c in approved_cases(include_drafts=True) if c["thread"]["status"] != "resolved"]
     tickets = db.list_tickets()
     for c in cases:
         mine = [k for k in tickets if k["thread_id"] == c["thread"]["id"]]
@@ -268,6 +268,78 @@ def case_matches(thread_id: int) -> list[dict]:
                     "exact": p["type"] in ("single", "combined", "partial")})
     order = {"single": 0, "combined": 0, "partial": 1, "related": 2, "none": 3}
     out.sort(key=lambda r: (order.get(r["plan"]["type"], 9), r["ticket"]["urgency"] != "critical"))
+    return out
+
+
+def case_needs(thread_id: int) -> list[dict]:
+    """Every need of a case with its progress and the one next action, for the case page."""
+    out = []
+    links = db.list_links()
+    for k in db.list_tickets(thread_id=thread_id):
+        steps = db.list_steps(k["id"])
+        mine = [l for l in links if l["ticket_id"] == k["id"] and l["status"] != "cancelled"]
+        plan = {"type": "covered", "picks": []} if k["status"] != "new" else ticket_matches(k)["plan"]
+        nxt = ticket_next_step(k, plan, steps) if k["status"] not in ("checked", "cancelled") else None
+        out.append({"ticket": k, "done": sum(1 for x in steps if x["done_at"]), "total": len(steps),
+                    "partners": sorted({l["donor_name"] for l in mine}), "next": nxt})
+    order = {"delivered": 0, "in_progress": 1, "matched": 2, "new": 3, "checked": 4, "cancelled": 5}
+    return sorted(out, key=lambda r: order.get(r["ticket"]["status"], 9))
+
+
+def case_history(thread_id: int, limit: int = 30) -> list[dict]:
+    """What happened on this case, newest first: drafts, approval, matches, steps, messages, resolution."""
+    thread = db.get_thread(thread_id)
+    if not thread:
+        return []
+    ev = [{"at": thread["opened_at"], "who": None, "kind": "start", "text": "First message: case opened."}]
+    with db.tx() as conn:
+        for s in conn.execute("SELECT version, status, reviewer, created_at, reviewed_at FROM summaries "
+                              "WHERE thread_id = ? ORDER BY version", (thread_id,)):
+            ev.append({"at": s["created_at"], "who": "AI", "kind": "draft",
+                       "text": "AI draft written." if s["version"] == 1 else f"AI draft updated from new messages (v{s['version']})."})
+            if s["status"] == "approved" and s["reviewed_at"]:
+                ev.append({"at": s["reviewed_at"], "who": s["reviewer"], "kind": "approved", "text": "Draft approved."})
+            elif s["status"] == "rejected" and s["reviewed_at"]:
+                ev.append({"at": s["reviewed_at"], "who": s["reviewer"], "kind": "rejected", "text": "Draft rejected."})
+        for i in conn.execute("SELECT sent_at, author, body FROM items WHERE thread_id = ? AND direction = 'out' "
+                              "AND body LIKE '[%'", (thread_id,)):
+            label = (i["body"] or "")[1:].split("]", 1)[0]
+            ev.append({"at": i["sent_at"], "who": i["author"], "kind": "message", "text": label + "."})
+    for k in db.list_tickets(thread_id=thread_id):
+        label = matching.CATEGORY_LABELS.get(k["category"], k["category"]).capitalize()
+        for e in db.list_events(k["id"]):
+            if e["kind"] == "created":
+                continue
+            if e["kind"] == "status" and (e["text"].startswith("Status:") or e["text"].startswith("Every need")):
+                continue  # the step or match that caused it is already listed
+            ev.append({"at": e["at"], "who": e["who"], "kind": e["kind"], "text": f"{label}: {e['text']}",
+                       "ticket": k["id"], "seq": e["id"]})
+    if thread.get("resolved_at"):
+        ev.append({"at": thread["resolved_at"], "who": None, "kind": "resolved", "text": "Case resolved: every need confirmed.", "seq": 10**9})
+    ev.sort(key=lambda e: (e["at"] or "", e.get("seq", 0), e["kind"] == "resolved"), reverse=True)
+    return ev[:limit]
+
+
+def resolved_cases() -> list[dict]:
+    """The results log for Impact: every resolved case with what was delivered, by whom, for how many pupils."""
+    cases = {c["thread"]["id"]: c for c in approved_cases()}
+    links = db.list_links()
+    out = []
+    for t in db.list_threads("resolved"):
+        tickets = [k for k in db.list_tickets(thread_id=t["id"]) if k["status"] == "checked"]
+        c = cases.get(t["id"])
+        days = None
+        if t.get("resolved_at") and t.get("opened_at"):
+            days = max(0, (datetime.fromisoformat(t["resolved_at"]) - datetime.fromisoformat(t["opened_at"])).days)
+        out.append({
+            "thread": t, "school": (c["score"]["name"] if c else None) or t["title"] or t["display_name"],
+            "region": c["score"]["region"] if c else None, "pupils": c["score"]["students"] if c else None,
+            "delivered": [matching.CATEGORY_LABELS.get(k["category"], k["category"]) + (f" ({k['quantity_text']})" if k.get("quantity_text") else "")
+                          for k in tickets],
+            "partners": sorted({l["donor_name"] for l in links if l["ticket_id"] in {k["id"] for k in tickets}
+                                and l["status"] != "cancelled"}),
+            "days": days, "resolved_at": t.get("resolved_at")})
+    out.sort(key=lambda r: r["resolved_at"] or "", reverse=True)
     return out
 
 
@@ -367,6 +439,26 @@ def set_status(ticket_id: int, status: str, who: str, note: str | None = None) -
     db.set_ticket(ticket_id, **fields)
     db.add_event(ticket_id, "status", f"Status: {STATUS_LABELS[ticket['status']]} → {STATUS_LABELS[status]}."
                  + (f" {note}" if note else ""), who)
+    if refresh_case(ticket["thread_id"], who) == "resolved":
+        db.add_event(ticket_id, "status", "Every need of this school is confirmed: case resolved.", who)
+
+
+def refresh_case(thread_id: int, who: str = "staff") -> str | None:
+    """Keep the case in step with its needs: once every need is confirmed by the school (or cancelled, with at
+    least one confirmed), the case is resolved and counted on Impact. If a need reopens, the case is active again."""
+    thread = db.get_thread(thread_id)
+    if not thread or thread["status"] not in ("approved", "resolved"):
+        return None
+    tickets = db.list_tickets(thread_id=thread_id)
+    live = [k for k in tickets if k["status"] != "cancelled"]
+    done = bool(live) and all(k["status"] == "checked" for k in live)
+    if done and thread["status"] == "approved":
+        db.set_thread(thread_id, status="resolved", resolved_at=db.now())
+        return "resolved"
+    if not done and thread["status"] == "resolved":
+        db.set_thread(thread_id, status="approved", resolved_at=None)
+        return "reopened"
+    return None
 
 
 def step_done(ticket_id: int, step_id: int, who: str) -> None:
@@ -534,9 +626,16 @@ def today_view() -> dict:
         f["school"] = names.get(f["thread_id"]) or f.get("display_name")
     for k in stalled:
         k["school"] = names.get(k["thread_id"]) or k.get("display_name")
-    count = len(drafts) + len(followups) + len(ready) + len(flagged) + len(stalled)
+    # delivered, waiting for the school to say it arrived: one click resolves the need (and the case if it was the last)
+    confirm = []
+    for k in db.list_tickets(status="delivered"):
+        step = next((x for x in db.list_steps(k["id"]) if x["title"].startswith(CONFIRM_PREFIX) and not x["done_at"]), None)
+        if step:
+            confirm.append({**k, "school": names.get(k["thread_id"]) or k.get("display_name"), "step_id": step["id"]})
+    count = len(drafts) + len(followups) + len(ready) + len(flagged) + len(stalled) + len(confirm)
     return {"drafts": drafts, "followups": followups, "ready": ready, "flagged": flagged, "stalled": stalled,
-            "act_now": act_now, "no_partner": no_partner, "count": count, "hold": m["boxes"]["safety_hold"]}
+            "confirm": confirm, "act_now": act_now, "no_partner": no_partner, "count": count,
+            "hold": m["boxes"]["safety_hold"], "resolved": resolved_cases()[:4]}
 
 
 # ---------------------------------------------------------------- Impact: the donor report
@@ -594,7 +693,22 @@ def impact_view() -> dict:
                         "pupils": c["score"]["students"] if c else None,
                         "region": c["score"]["region"] if c else None})
     sent_followups = [f for f in db.list_followups() if f["sent_at"]]
+    resolved = resolved_cases()
+    # month by month: needs confirmed by schools, running total (the "results accumulating" chart)
+    months: dict[str, int] = {}
+    for k in confirmed:
+        m = (k.get("delivered_at") or "")[:7]
+        if m:
+            months[m] = months.get(m, 0) + 1
+    timeline, running = [], 0
+    for m in sorted(months):
+        running += months[m]
+        timeline.append({"month": m, "added": months[m], "total": running})
+    awaiting = [{"ticket": k, "school": school_names().get(k["thread_id"]) or k["case_title"]}
+                for k in delivered if k["status"] == "delivered"]
     return {
+        "resolved": resolved, "resolved_pupils": sum(r["pupils"] or 0 for r in resolved),
+        "timeline": timeline[-12:], "awaiting": awaiting,
         "schools": len(cases), "schools_helped": len(helped_threads), "pupils": pupils,
         "needs_total": len([k for k in tickets if k["status"] != "cancelled"]), "delivered": len(delivered),
         "confirmed": len(confirmed), "confirmed_rate": round(100 * len(confirmed) / len(delivered)) if delivered else None,
@@ -639,7 +753,7 @@ def journey_counts() -> dict:
     return {
         "request": sum(1 for t in threads if t["status"] == "open"),
         "check": sum(1 for t in threads if t["status"] == "draft_ready"),
-        "rank": len(approved_cases()),
+        "rank": len(matrix_view()["cases"]),
         "match": sum(1 for k in tickets if k["status"] == "new"),
         "deliver": sum(1 for k in tickets if k["status"] in ("matched", "in_progress")),
         "confirm": sum(1 for k in tickets if k["status"] == "delivered"),
@@ -651,6 +765,8 @@ def case_stage(thread: dict, tickets: list[dict]) -> str | None:
         return "request"
     if thread["status"] == "draft_ready":
         return "check"
+    if thread["status"] == "resolved":
+        return "confirm"
     if thread["status"] != "approved":
         return None
     order = ["match", "deliver", "confirm"]
@@ -696,6 +812,10 @@ def case_next_step(thread: dict, summary: dict | None, tickets: list[dict], part
                 "hint": "Click the I-numbers to see where each fact comes from.", "href": "#decide", "button": "Review and approve"}
     if thread["status"] == "open":
         return {"label": "Collecting messages", "hint": "The AI writes a draft once the messages are processed."}
+    if thread["status"] == "resolved":
+        return {"label": "Resolved: every need is confirmed by the school",
+                "hint": "It counts on Impact. Follow-ups at 30, 90 and 180 days show up on Today.", "href": "/impact",
+                "button": "See Impact"}
     if thread["status"] != "approved":
         return None
     if partner:

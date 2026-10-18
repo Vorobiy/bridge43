@@ -1,25 +1,41 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
 {% block title %}Needs{% endblock %}
+{% block head %}
+<style>
+.board .card { padding: 9px 11px; }
+.board .card .school { font-weight: 700; font-size: 14.5px; text-decoration: none; color: var(--ink); display: block; line-height: 1.25; }
+.board .card .school:hover { color: var(--accent); }
+.board .card .need { font-size: 13.5px; margin-top: 2px; }
+.board .card .foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.board .card .foot form { margin-left: auto; } .board .card .foot button { padding: 3px 10px; font-size: 12.5px; }
+.board .col h3 { display: flex; justify-content: space-between; }
+</style>
+{% endblock %}
 {% block body %}
 {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
-<div class="row" style="align-items:center"><h1 style="margin-bottom:4px; flex:3">Needs</h1>
-  <div style="flex:0 0 auto"><a class="btn" href="/matches">Matching overview: needs vs. partner offers</a></div></div>
-<p class="muted small" style="margin-top:0">One card per school need. It moves right as a partner is found, the work is done and the school confirms it.</p>
+{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+<div class="row" style="align-items:center"><h1 style="margin-bottom:10px; flex:3">Needs</h1>
+  <div style="flex:0 0 auto"><a class="btn" href="/matches">Needs vs. partner offers</a></div></div>
 <div class="board">
 {% for status, items in cols.items() %}
   <div class="col" id="col-{{ status }}">
-    <h3>{{ status_labels[status] }} <span class="muted">({{ items|length }})</span></h3>
-    {% for k in items %}
+    <h3>{{ status_labels[status] }} <span class="muted">{{ items|length }}</span></h3>
+    {% for k in (items[:6] if status == "checked" else items) %}
     <div class="card">
-      <a class="title" href="/tickets/{{ k.id }}">{{ category_labels.get(k.category, k.category)|capitalize }}</a>
-      {% if k.urgency in ("critical", "high") %}<span class="badge b-{{ k.urgency }}">{{ k.urgency }}</span>{% endif %}
-      <div class="small">{{ k.description }}{% if k.quantity_text %} · {{ k.quantity_text }}{% endif %}</div>
-      <div class="small muted">{{ k.school }} · {{ k.case_number }}</div>
-      {% if k.partners %}<div class="small">With: {{ k.partners|join(", ") }}</div>{% endif %}
-      {% if k.plan_type and status in ("new", "matched") %}<span class="badge b-{{ k.plan_type }}">{{ plan_labels[k.plan_type] }}</span>{% endif %}
+      <a class="school" href="/tickets/{{ k.id }}">{{ k.school }}</a>
+      <div class="need">{{ category_labels.get(k.category, k.category)|capitalize }}{% if k.quantity_text %} · {{ k.quantity_text }}{% endif %}</div>
+      <div class="foot">
+        {% if k.urgency in ("critical", "high") and status not in ("checked",) %}<span class="badge b-{{ k.urgency }}">{{ k.urgency }}</span>{% endif %}
+        {% if k.partners %}<span class="small muted">{{ k.partners|join(", ") }}</span>
+        {% elif k.plan_type and status == "new" %}<span class="badge b-{{ k.plan_type }}">{{ plan_labels[k.plan_type] }}</span>{% endif %}
+        {% if status == "new" and k.plan_type in ("single", "combined") %}
+          <form method="post" action="/tickets/{{ k.id }}/assign-plan"><input type="hidden" name="back" value="/tickets"><button class="primary" type="submit">Confirm</button></form>
+        {% endif %}
+      </div>
     </div>
     {% else %}<p class="small muted" style="margin:4px">Empty.</p>{% endfor %}
+    {% if status == "checked" and items|length > 6 %}<a class="small" href="/impact">{{ items|length - 6 }} more on Impact →</a>{% endif %}
   </div>
 {% endfor %}
 </div>

@@ -374,6 +374,7 @@ def load_part_two(bambui_thread: int, buildright_thread: int) -> None:
         db.add_followups(k["id"], long_ago)  # delivered 35 days ago: the 30-day follow-up is due
         for st in db.list_steps(k["id"]):
             workflow.step_done(k["id"], st["id"], "demo")
+        db.set_ticket(k["id"], delivered_at=long_ago.isoformat(timespec="seconds"))  # it happened 35 days ago
     db.add_quote(db.list_tickets(thread_id=past)[0]["id"], 6_500_000, donor_id=aqua, quantity=1, unit="borehole",
                  note="Drilling 60 m, hand pump, water test", added_by="demo")
 
@@ -409,6 +410,11 @@ def main() -> None:
     print(f"Demo threads ready: /threads/{a} (school need) and /threads/{b} (partner offer)")
     if "--intake-only" not in __import__("sys").argv:
         load_part_two(a, b)
+        # demo history: a case resolved by the seed is dated to its last delivery, not to "now"
+        for t in db.list_threads("resolved"):
+            last = max((k["delivered_at"] for k in db.list_tickets(thread_id=t["id"]) if k.get("delivered_at")), default=None)
+            if last:
+                db.set_thread(t["id"], resolved_at=last)
         print("Part two demo ready: /dashboard, /tickets, /partners, /matches")
 
 

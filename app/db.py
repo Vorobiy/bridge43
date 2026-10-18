@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS contacts (
 CREATE TABLE IF NOT EXISTS threads (
     id INTEGER PRIMARY KEY,
     contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-    status TEXT NOT NULL DEFAULT 'open',   -- open | draft_ready | approved | not_relevant (all still collecting) | closed | rejected
+    status TEXT NOT NULL DEFAULT 'open',   -- open | draft_ready | approved | resolved | not_relevant (all still collecting) | closed | rejected
     relevance_locked INTEGER NOT NULL DEFAULT 0, -- 1 = staff decided relevance; the AI no longer changes it
     case_number TEXT UNIQUE,               -- PS43-2026-0001, given when the case is opened
     title TEXT,
@@ -255,6 +255,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_threads_case ON threads(case_number)")
     if "relevance_locked" not in _columns(conn, "threads"):
         conn.execute("ALTER TABLE threads ADD COLUMN relevance_locked INTEGER NOT NULL DEFAULT 0")
+    if "resolved_at" not in _columns(conn, "threads"):
+        conn.execute("ALTER TABLE threads ADD COLUMN resolved_at TEXT")
     if "reply_to" not in _columns(conn, "contacts"):
         conn.execute("ALTER TABLE contacts ADD COLUMN reply_to TEXT")
     # 1. one contact per phone number: whatsapp:+237..., +237... and tel:+237... are the same person
@@ -430,7 +432,7 @@ def delete_contact_data(contact_id: int) -> list[str]:
 
 # ---------------------------------------------------------------- threads
 
-ACTIVE_STATUSES = ("open", "draft_ready", "approved", "not_relevant")
+ACTIVE_STATUSES = ("open", "draft_ready", "approved", "resolved", "not_relevant")
 
 
 def open_thread_for(contact_id: int, at: str | None = None) -> dict[str, Any]:
@@ -443,7 +445,7 @@ def open_thread_for(contact_id: int, at: str | None = None) -> dict[str, Any]:
     at = at or now()
     with tx() as conn:
         t = conn.execute(
-            "SELECT * FROM threads WHERE contact_id = ? AND status IN ('open', 'draft_ready', 'approved', 'not_relevant') "
+            "SELECT * FROM threads WHERE contact_id = ? AND status IN ('open', 'draft_ready', 'approved', 'resolved', 'not_relevant') "
             "ORDER BY id DESC LIMIT 1",
             (contact_id,),
         ).fetchone()
@@ -494,7 +496,7 @@ def touch_thread(thread_id: int, at: str) -> None:
         t = conn.execute("SELECT * FROM threads WHERE id = ?", (thread_id,)).fetchone()
         if not t:
             return
-        stale = 1 if t["status"] in ("draft_ready", "approved") else t["stale_summary"]
+        stale = 1 if t["status"] in ("draft_ready", "approved", "resolved") else t["stale_summary"]
         conn.execute(
             "UPDATE threads SET last_item_at = MAX(last_item_at, ?), stale_summary = ? WHERE id = ?",
             (at, stale, thread_id),
@@ -620,7 +622,9 @@ def add_summary(thread_id: int, data: dict, model: str, item_ids: list[int]) -> 
             "INSERT INTO summaries (thread_id, version, model, data, item_ids, created_at) VALUES (?,?,?,?,?,?)",
             (thread_id, version, model, json.dumps(data, ensure_ascii=False), json.dumps(item_ids), now()),
         )
-        conn.execute("UPDATE threads SET status = 'draft_ready', stale_summary = 0 WHERE id = ?", (thread_id,))
+        # a resolved case stays resolved (it keeps counting on Impact); its new draft is flagged for review
+        conn.execute("UPDATE threads SET status = CASE WHEN status = 'resolved' THEN 'resolved' ELSE 'draft_ready' END, "
+                     "stale_summary = CASE WHEN status = 'resolved' THEN 1 ELSE 0 END WHERE id = ?", (thread_id,))
         return dict(conn.execute("SELECT * FROM summaries WHERE id = ?", (cur.lastrowid,)).fetchone())
 
 

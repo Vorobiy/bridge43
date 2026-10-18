@@ -3,57 +3,81 @@
 {% block head %}
 <style>
 .impact-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
-.big-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 12px 0 16px; }
+.big-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 12px 0 16px; }
 @media (max-width: 760px) { .big-kpis { grid-template-columns: 1fr 1fr; } }
 .big-kpis > div { background: var(--panel); border: 1px solid var(--line); border-top: 6px solid var(--k, var(--green));
                   border-radius: var(--radius); padding: 12px 16px; }
-.big-kpis strong { display: block; font-family: var(--display); font-weight: 700; font-size: 44px; line-height: 1.05; }
-.big-kpis span { color: var(--muted); font-size: 14px; }
+.big-kpis strong { display: block; font-family: var(--display); font-weight: 700; font-size: 40px; line-height: 1.05; }
+.big-kpis span { color: var(--muted); font-size: 13.5px; }
+.results { list-style: none; padding: 0; margin: 0; }
+.results li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.results li:last-child { border-bottom: 0; }
+.results .school { font-weight: 700; font-size: 16px; }
+.results .what { font-size: 14.5px; margin-top: 2px; }
+.results .meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.results .num { text-align: right; white-space: nowrap; }
+.results .num b { font-family: var(--display); font-size: 22px; display: block; line-height: 1; }
+.results .num span { font-size: 12px; color: var(--muted); }
+.chart { display: flex; align-items: flex-end; gap: 6px; height: 120px; padding: 6px 0 0; }
+.chart .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
+.chart .col i { display: block; width: 100%; max-width: 44px; background: var(--green); border-radius: 4px 4px 0 0; }
+.chart .col b { font-size: 12px; } .chart .col span { font-size: 11px; color: var(--muted); }
 .bar { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
-.bar .lbl { flex: 0 0 160px; }
-.bar .track { flex: 1; height: 14px; background: var(--bg); border-radius: 7px; overflow: hidden; }
+.bar .lbl { flex: 0 0 150px; }
+.bar .track { flex: 1; height: 12px; background: var(--bg); border-radius: 6px; overflow: hidden; }
 .bar .track i { display: block; height: 100%; background: var(--green); }
-.story { border-left: 5px solid var(--yellow); padding: 6px 12px; margin: 10px 0; background: var(--bg); border-radius: 0 8px 8px 0; }
 @media print {
   header.top, .no-print, .flash.warn { display: none !important; }
   body { background: #fff; } main { padding: 0; } .panel, .big-kpis > div { break-inside: avoid; }
+  details { display: block; } details > * { display: block; }
 }
 </style>
 {% endblock %}
 {% block body %}
 <div class="impact-head">
   <div><h1 style="margin-bottom:2px">Impact</h1>
-    <p class="muted" style="margin-top:0">What PS43 and its partners have delivered, as confirmed by the schools. {{ date }}.</p></div>
-  <button class="no-print primary" onclick="window.print()">Print or save as PDF for donors</button>
+    <p class="muted" style="margin-top:0">Results confirmed by the schools themselves · {{ date }}</p></div>
+  <button class="no-print" onclick="window.print()">Print for donors</button>
 </div>
 
 <div class="big-kpis">
-  <div style="--k:var(--green)"><strong>{{ "{:,}".format(v.pupils) }}</strong><span>pupils in schools that received help</span></div>
-  <div style="--k:var(--navy)"><strong>{{ v.delivered }}</strong><span>needs delivered, of {{ v.needs_total }} recorded</span></div>
-  <div style="--k:var(--yellow)"><strong>{{ v.confirmed_rate if v.confirmed_rate is not none else "—" }}{% if v.confirmed_rate is not none %}%{% endif %}</strong><span>of deliveries confirmed by the school itself</span></div>
-  <div style="--k:var(--red)"><strong>{{ v.median_days if v.median_days is not none else "—" }}</strong><span>days from first message to delivery (median)</span></div>
-  <div style="--k:var(--green)"><strong>{{ "{:,}".format(v.questioned) }}</strong><span>FCFA of over-priced quotes questioned ({{ v.flagged_quotes }} quote{{ "" if v.flagged_quotes == 1 else "s" }})</span></div>
-  <div style="--k:var(--navy)"><strong>{{ v.partners }}</strong><span>partners: {{ v.trust_counts.Trusted }} trusted, {{ v.trust_counts.Verified }} verified, {{ v.trust_counts.New }} new</span></div>
+  <div style="--k:var(--green)"><strong>{{ v.resolved|length }}</strong><span>cases resolved</span></div>
+  <div style="--k:var(--navy)"><strong>{{ "{:,}".format(v.pupils) }}</strong><span>pupils in schools helped</span></div>
+  <div style="--k:var(--yellow)"><strong>{{ v.confirmed }}<small style="font-size:18px;color:var(--muted)"> / {{ v.delivered }}</small></strong><span>needs confirmed / delivered</span></div>
+  <div style="--k:var(--red)"><strong>{{ v.median_days if v.median_days is not none else "—" }}</strong><span>days, first message → delivery</span></div>
 </div>
 
 <div class="grid2">
   <div class="panel">
-    <h2 style="margin-top:0">Confirmed by schools</h2>
-    <p class="small muted" style="margin-top:0">Each delivery below was confirmed by the school, with photos, not just reported by the partner.</p>
-    {% for s in v.stories %}
-    <div class="story"><strong>{{ s.school }}</strong>{% if s.region %} · {{ s.region }}{% endif %}<br>
-      {{ s.ticket.description }}{% if s.ticket.quantity_text %} ({{ s.ticket.quantity_text }}){% endif %}
-      {% if s.partners %} — with {{ s.partners|join(" and ") }}{% endif %}
-      <div class="small muted">{% if s.pupils %}{{ s.pupils }} pupils · {% endif %}delivered {{ (s.ticket.delivered_at or "")[:10] }}</div></div>
-    {% else %}<p class="muted small">No confirmed delivery yet.</p>{% endfor %}
+    <h2 style="margin-top:0">Results log</h2>
+    {% if v.resolved %}
+    <ul class="results">
+    {% for r in v.resolved %}
+      <li><div>
+          <div class="school"><a href="/threads/{{ r.thread.id }}" style="color:inherit;text-decoration:none">{{ r.school }}</a></div>
+          <div class="what">{{ r.delivered|join(", ")|capitalize }}{% if r.partners %} · with {{ r.partners|join(", ") }}{% endif %}</div>
+          <div class="meta">{{ r.thread.case_number }}{% if r.region %} · {{ r.region }}{% endif %} · resolved {{ r.resolved_at|ago }}{% if r.days is not none %} · took {{ r.days }} day{{ "" if r.days == 1 else "s" }}{% endif %}</div>
+        </div>
+        <div class="num">{% if r.pupils %}<b>{{ r.pupils }}</b><span>pupils</span>{% endif %}</div></li>
+    {% endfor %}
+    </ul>
+    {% else %}<p class="muted small">No case resolved yet. A case is resolved when the school confirms every need was delivered.</p>{% endif %}
+
+    {% if v.awaiting %}
+    <h3>Delivered, waiting for the school to confirm</h3>
+    <ul class="small" style="margin:0; padding-left:18px">{% for a in v.awaiting %}<li><a href="/tickets/{{ a.ticket.id }}">{{ a.school }}: {{ a.ticket.description }}</a></li>{% endfor %}</ul>
+    {% endif %}
   </div>
+
   <div>
     <div class="panel">
-      <h2 style="margin-top:0">By region</h2>
-      <table><thead><tr><th>Region</th><th>Schools</th><th>Open needs</th><th>Delivered</th><th>Pupils helped</th></tr></thead><tbody>
-      {% for r in v.by_region %}<tr><td><strong>{{ r.region }}</strong></td><td>{{ r.schools }}</td><td>{{ r.open }}</td><td>{{ r.delivered }}</td><td>{{ "{:,}".format(r.pupils) }}</td></tr>
-      {% else %}<tr><td colspan="5" class="muted">No schools yet.</td></tr>{% endfor %}
-      </tbody></table>
+      <h2 style="margin-top:0">Needs confirmed, month by month</h2>
+      {% if v.timeline %}{% set top = v.timeline|map(attribute="total")|max %}
+      <div class="chart" role="img" aria-label="Running total of needs confirmed by schools">
+        {% for m in v.timeline %}<div class="col"><b>{{ m.total }}</b><i style="height:{{ (90 * m.total / top)|round|int }}px" title="+{{ m.added }} in {{ m.month }}"></i><span>{{ m.month[5:] }}/{{ m.month[2:4] }}</span></div>{% endfor %}
+      </div>
+      <p class="small muted" style="margin-bottom:0">Running total. It grows each time a school confirms a delivery.</p>
+      {% else %}<p class="muted small">Starts with the first confirmed delivery.</p>{% endif %}
     </div>
     {% if v.by_category %}
     <div class="panel" style="margin-top:16px">
@@ -63,18 +87,16 @@
         <span class="track"><i style="width:{{ (100 * n / top)|round|int }}%"></i></span><b>{{ n }}</b></div>{% endfor %}
     </div>
     {% endif %}
-    <div class="panel" style="margin-top:16px">
-      <h2 style="margin-top:0">Running cost</h2>
-      {% if v.cost %}
-        <p style="margin:0"><span class="count" style="font-family:var(--display);font-weight:700;font-size:34px">{{ "%.2f"|format(v.cost.per_case or 0) }} {{ v.cost.currency }}</span> per case</p>
-        <p class="small muted">{{ v.cost.counts.cases }} cases over {{ v.cost.months }} month{{ "" if v.cost.months == 1 else "s" }}:
-          {% for k, val in v.cost.parts.items() %}{{ k }} {{ "%.2f"|format(val) }}{% if not loop.last %} · {% endif %}{% endfor %}
-          ({{ v.cost.counts.ai_drafts }} AI drafts, {{ v.cost.counts.messages }} messages).</p>
-      {% else %}
-        <p class="small muted" style="margin:0">Enter your real prices (AI per draft, WhatsApp per message, hosting per month) in <a href="/settings">Settings</a> to see the cost per case.</p>
-      {% endif %}
-    </div>
+    <details class="more-box">
+      <summary>By region, partners, prices and cost</summary>
+      <table class="small"><thead><tr><th>Region</th><th>Schools</th><th>Open</th><th>Delivered</th><th>Pupils helped</th></tr></thead><tbody>
+      {% for r in v.by_region %}<tr><td><strong>{{ r.region }}</strong></td><td>{{ r.schools }}</td><td>{{ r.open }}</td><td>{{ r.delivered }}</td><td>{{ "{:,}".format(r.pupils) }}</td></tr>
+      {% else %}<tr><td colspan="5" class="muted">No schools yet.</td></tr>{% endfor %}
+      </tbody></table>
+      <p class="small">Partners: {{ v.partners }} ({{ v.trust_counts.Trusted }} trusted, {{ v.trust_counts.Verified }} verified, {{ v.trust_counts.New }} new); {{ v.partners_completed }} completed a confirmed case.
+        Over-priced quotes questioned: {{ "{:,}".format(v.questioned) }} FCFA ({{ v.flagged_quotes }}). Follow-up checks sent: {{ v.followups_sent }}.
+        {% if v.cost %}Running cost: {{ "%.2f"|format(v.cost.per_case or 0) }} {{ v.cost.currency }} per case.{% else %}<a href="/settings">Add prices</a> to see the cost per case.{% endif %}</p>
+    </details>
   </div>
 </div>
-<p class="small muted">Follow-up checks sent to schools after delivery: {{ v.followups_sent }}. Partners who completed at least one confirmed case: {{ v.partners_completed }}.</p>
 {% endblock %}

@@ -204,7 +204,10 @@ def test_full_loop_school_to_follow_up(client, fakes, monkeypatch):
     for url in ("/dashboard", "/tickets", "/partners", f"/partners/{donors['Toronto Group']['id']}", "/matches",
                 "/api/matrix", "/api/partners", "/api/matches", f"/threads/{school['id']}"):
         assert client.get(url).status_code == 200, url
-    assert client.get("/api/matrix").json()[0]["name"] == "GBHS Test"
+    # its only need is confirmed: the case is resolved, leaves the active ranking and shows on Impact
+    assert db.get_thread(school["id"])["status"] == "resolved"
+    assert all(c["name"] != "GBHS Test" for c in client.get("/api/matrix").json())
+    assert any(r["school"] == "GBHS Test" for r in client.get("/api/impact").json()["resolved"])
 
 
 def test_quotes_and_cancelled_commitment(client, fakes):

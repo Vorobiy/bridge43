@@ -86,3 +86,73 @@ def test_case_page_survives_old_drafts_missing_fields(client, fakes):
     r = client.get(f"/threads/{thread['id']}")
     assert r.status_code == 200 and "Old school" in r.text
     assert client.get("/dashboard").status_code == 200 and client.get("/").status_code == 200
+
+
+def test_case_lifecycle_updates_every_tab(client, fakes):
+    """Approve -> match -> steps from the case page -> school confirms -> case resolved -> Impact, Today, Inbox, Schools."""
+    _seed()
+    draft = next(t for t in db.list_threads() if t["status"] == "draft_ready")
+    s = db.latest_summary(draft["id"])
+    client.post(f"/summaries/{s['id']}/approve", data={"notes": ""})
+    assert db.get_thread(draft["id"])["status"] == "approved" and db.list_tickets(thread_id=draft["id"])
+    assert "not reviewed yet" not in client.get("/dashboard").text.split(draft["case_number"])[0][-400:]
+
+    # a school with a ready match: accept it from the case page, then work every step from the case page
+    tid = next(c["thread"]["id"] for c in workflow.approved_cases()
+               if any(r["exact"] and r["picks"] for r in workflow.case_matches(c["thread"]["id"])))
+    for r in workflow.case_matches(tid):
+        if r["exact"] and r["picks"]:
+            client.post(f"/tickets/{r['ticket']['id']}/assign-plan", data={"back": f"/threads/{tid}"})
+    for k in db.list_tickets(thread_id=tid):
+        if k["status"] == "new":
+            client.post(f"/tickets/{k['id']}/status", data={"status": "cancelled", "back": f"/threads/{tid}"})
+    page = client.get(f"/threads/{tid}").text
+    assert 'id="work"' in page and "steps" in page
+    for k in db.list_tickets(thread_id=tid):
+        if k["status"] == "matched":  # "Tell the partner" first (sent from a staff phone, logged)
+            donor = next(l for l in db.list_links(ticket_id=k["id"]) if l["status"] != "cancelled")
+            client.post(f"/tickets/{k['id']}/message", data={"to": str(donor["donor_id"]), "text": "Bonjour", "manual": "1"})
+    for _ in range(40):
+        rows = [r for r in workflow.case_needs(tid) if r["next"] and r["next"].get("action")]
+        if not rows:
+            break
+        resp = client.post(rows[0]["next"]["action"], data={"back": f"/threads/{tid}"}, follow_redirects=False)
+        assert resp.status_code == 303 and resp.headers["location"].startswith(f"/threads/{tid}")
+    t = db.get_thread(tid)
+    assert t["status"] == "resolved" and t["resolved_at"]
+
+    # every tab reflects it
+    impact = client.get("/api/impact").json()
+    assert any(r["case_number"] == t["case_number"] for r in impact["resolved"])
+    assert t["case_number"] in client.get("/?status=resolved").text
+    assert all(c["thread_id"] != tid for c in client.get("/api/matrix").json())
+    assert "Recently resolved" in client.get("/today").text
+    history = workflow.case_history(tid)
+    assert history[0]["kind"] == "resolved" or any(e["kind"] == "resolved" for e in history)
+
+    # a later message (a follow-up answer) keeps the case resolved and flags it for review
+    db.add_summary(tid, db.latest_summary(tid)["data"], "test", [])
+    t = db.get_thread(tid)
+    assert t["status"] == "resolved" and t["stale_summary"] == 1
+    # reopening a need puts the case back in progress
+    k = next(k for k in db.list_tickets(thread_id=tid) if k["status"] == "checked")
+    client.post(f"/tickets/{k['id']}/status", data={"status": "in_progress"})
+    assert db.get_thread(tid)["status"] == "approved"
+
+
+def test_partner_page_assign_and_today_confirm(client, fakes):
+    _seed()
+    p = next(x for x in workflow.partners_view() if workflow.partner_can_help(x["id"]))
+    r = next((r for r in workflow.partner_can_help(p["id"]) if r["best"]["exact"]), None)
+    if r:
+        resp = client.post(f"/tickets/{r['ticket']['id']}/assign", data={
+            "donor_id": p["id"], "item_id": r["best"]["item_id"], "back": f"/partners/{p['id']}"}, follow_redirects=False)
+        assert resp.headers["location"].startswith(f"/partners/{p['id']}")
+        assert db.get_ticket(r["ticket"]["id"])["status"] == "matched"
+    # a delivered need shows on Today with a one-click confirmation
+    k = next(k for k in db.list_tickets() if k["status"] in ("matched", "in_progress"))
+    workflow.set_status(k["id"], "delivered", "test")
+    v = workflow.today_view()
+    item = next(c for c in v["confirm"] if c["id"] == k["id"])
+    resp = client.post(f"/tickets/{k['id']}/steps/{item['step_id']}/done", data={"back": "/today"}, follow_redirects=False)
+    assert resp.headers["location"].startswith("/today") and db.get_ticket(k["id"])["status"] == "checked"

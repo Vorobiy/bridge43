@@ -30,12 +30,14 @@
       {% else %}<input type="hidden" name="verified" value="1"><button class="primary" type="submit">I checked who they are</button>
       <span class="small muted">registration papers, references or a visit</span>{% endif %}
     </form>
-    <form method="post" action="/partners/{{ p.id }}/notes" style="margin-top:12px">
+    {% if p.notes %}<p class="small" style="margin:10px 0 0"><strong>Notes:</strong> {{ p.notes }}</p>{% endif %}
+    <details style="margin-top:8px"><summary class="small">Edit roles and notes</summary>
+    <form method="post" action="/partners/{{ p.id }}/notes">
       <label>Roles</label>
       <div class="row">{% for r, label in role_labels.items() %}<label class="check" style="flex:0 0 auto"><input type="checkbox" name="roles" value="{{ r }}" {% if r in p.roles %}checked{% endif %}> {{ label }}</label>{% endfor %}</div>
       <label>Staff notes</label><textarea name="notes" rows="3">{{ p.notes or "" }}</textarea>
       <p><button type="submit">Save</button></p>
-    </form>
+    </form></details>
   </div>
 
   <div class="panel" style="margin-top:16px; overflow-x:auto">
@@ -84,11 +86,17 @@
   <div class="panel" style="margin-top:16px; overflow-x:auto">
     <h2 style="margin-top:0">Schools they could help now ({{ can_help|length }})</h2>
     {% if can_help %}
-    <table><thead><tr><th>Need</th><th>Match</th><th>Why</th></tr></thead><tbody>
-    {% for r in can_help %}<tr class="clickable" onclick="location.href='/tickets/{{ r.ticket.id }}'">
-      <td><a href="/tickets/{{ r.ticket.id }}"><strong>{{ r.ticket.description }}</strong></a>{% if r.ticket.quantity_text %} · {{ r.ticket.quantity_text }}{% endif %}<br>
-        <span class="small muted">{{ r.ticket.school }} · {{ r.ticket.case_number }}</span></td>
-      <td><strong>{{ r.best.score }}</strong></td><td class="small">{{ r.best.reasons[:2]|join(" · ") }}</td></tr>{% endfor %}
+    <table><thead><tr><th>Need</th><th>Fit</th><th></th></tr></thead><tbody>
+    {% for r in can_help %}<tr>
+      <td><a href="/tickets/{{ r.ticket.id }}"><strong>{{ r.ticket.school }}</strong></a><br>
+        <span class="small">{{ category_labels.get(r.ticket.category, r.ticket.category)|capitalize }}{% if r.ticket.quantity_text %} · {{ r.ticket.quantity_text }}{% endif %}</span><br>
+        <span class="small muted">{{ r.best.reasons[:2]|join(" · ") }}</span></td>
+      <td><strong>{{ r.best.score }}</strong></td>
+      <td>{% if r.best.exact %}<form method="post" action="/tickets/{{ r.ticket.id }}/assign">
+          <input type="hidden" name="donor_id" value="{{ p.id }}"><input type="hidden" name="item_id" value="{{ r.best.item_id }}">
+          <input type="hidden" name="quantity" value="{{ (r.best.covers)|qty if r.best.covers else '' }}"><input type="hidden" name="back" value="/partners/{{ p.id }}">
+          <button class="primary" type="submit">Assign{% if r.best.covers %} {{ (r.best.covers)|qty }}{% endif %}</button></form>
+        {% else %}<a class="btn" href="/tickets/{{ r.ticket.id }}">Look</a>{% endif %}</td></tr>{% endfor %}
     </tbody></table>
     {% else %}<p class="muted small">No open school need matches what they offer right now.</p>{% endif %}
   </div>

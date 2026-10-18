@@ -2,12 +2,12 @@
 {% block title %}Partners{% endblock %}
 {% block body %}
 {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
-<h1 style="margin-bottom:4px">Partners and donors</h1>
-<p class="muted small" style="margin-top:0">Everyone who can help: donors (money or goods), local contractors and NGOs who do the work, suppliers and shippers.
-  The list builds itself: every approved donor or partner conversation adds or updates a record. Trust is earned from what PS43 has seen, not what partners say.</p>
-<p class="small">
-  <a href="/partners" {% if not role %}style="font-weight:700"{% endif %}>All</a>
+<div class="row" style="align-items:center"><h1 style="margin-bottom:8px; flex:3">Partners</h1>
+  <div style="flex:0 0 auto"><a class="btn" href="#add" onclick="document.getElementById('add').open = true">+ Add partner</a></div></div>
+<p class="small" style="margin-top:0">
+  <a href="/partners" {% if not role %}style="font-weight:700"{% endif %}>All {{ partners|length if not role else "" }}</a>
   {% for r, label in role_labels.items() %} · <a href="/partners?role={{ r }}" {% if role == r %}style="font-weight:700"{% endif %}>{{ label }}</a>{% endfor %}
+  <span class="muted"> · trust rises only when a school confirms their work</span>
 </p>
 <div class="cards">
 {% for p in partners %}
@@ -20,14 +20,13 @@
       <div style="flex:0 0 auto" class="small">{{ p.trust.score }}</div>
     </div>
     {% if p.summary %}<p class="small" style="margin:6px 0">{{ p.summary }}</p>{% endif %}
-    <div class="small muted">{{ p.regions|join(", ") or "Regions not stated" }} · {{ p.open_items }} item{{ "" if p.open_items == 1 else "s" }} available
-      · {{ p.completed }} case{{ "" if p.completed == 1 else "s" }} completed with PS43</div>
+    <div class="small muted">{{ p.regions|join(", ") or "Regions not stated" }} · {{ p.open_items }} offer{{ "" if p.open_items == 1 else "s" }} · {{ p.completed }} done</div>
   </div>
 {% else %}<p class="muted">No partners yet. Approve a donor's or partner's conversation, or add one below.</p>{% endfor %}
 </div>
 
-<div class="panel" style="margin-top:16px">
-  <h2 style="margin-top:0">Add a partner PS43 already knows</h2>
+<details class="panel" style="margin-top:16px" id="add" {% if not partners %}open{% endif %}>
+  <summary style="margin:0"><h2 style="margin:0; display:inline">Add a partner PS43 already knows</h2></summary>
   <form method="post" action="/partners">
     <div class="row">
       <div><label>Name or organisation</label><input type="text" name="name" required></div>
@@ -42,5 +41,5 @@
     </div>
     <p><button class="primary" type="submit">Add partner</button></p>
   </form>
-</div>
+</details>
 {% endblock %}
